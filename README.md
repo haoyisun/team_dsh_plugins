@@ -6,7 +6,11 @@
 npx @deepseek-ai/dsh web
 ```
 
-当前包含费用统计插件 [`@team-dsh-plugins/cost-meter`](plugins/cost-meter)。
+## 插件列表
+
+| 插件 | 状态 | 说明 |
+|---|---|---|
+| [`@team-dsh-plugins/cost-meter`](plugins/cost-meter) | 可用 | 自动记录模型调用的 token 用量，按可配置的峰谷单价估算费用；在 DSH Web 中展示今日、本周、本月及累计消费、每日趋势、模型明细和 DeepSeek 账户余额。 |
 
 ## 快速开始
 
