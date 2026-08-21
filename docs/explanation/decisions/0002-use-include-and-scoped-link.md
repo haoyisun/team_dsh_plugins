@@ -15,8 +15,8 @@ DSH rc.7 没有 monorepo 自动扫描或 `pluginRepoPath`。Host Loader 可加�
 ## 决策
 
 - Web Profile 通过 `cordis:include` 引用仓库原生 YAML 注册表。
-- 所有插件使用 `@dsh-plugins/<id>`。
-- 仓库和 DSH Profile 各自的 `@dsh-plugins` scope 目录链接一次性指向仓库 `plugins/`，分别服务 Host Loader 与 Web Client module scanner。
+- 所有插件使用 `@team-dsh-plugins/<id>`。
+- 仓库和 DSH Profile 各自的 `@team-dsh-plugins` scope 目录链接一次性指向仓库 `plugins/`，分别服务 Host Loader 与 Web Client module scanner。
 
 ## 备选方案
 

@@ -1,5 +1,4 @@
 import {
-  cp,
   copyFile,
   lstat,
   mkdir,
@@ -13,9 +12,9 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { parse } from 'yaml';
 
-const START_MARKER = '# >>> dsh-plugins managed include >>>';
-const END_MARKER = '# <<< dsh-plugins managed include <<<';
-const PLUGIN_SCOPE = '@dsh-plugins/';
+const START_MARKER = '# >>> team-dsh-plugins managed include >>>';
+const END_MARKER = '# <<< team-dsh-plugins managed include <<<';
+const PLUGIN_SCOPE = '@team-dsh-plugins/';
 const VERIFIED_DSH_VERSIONS = new Set(['0.1.0-rc.7']);
 
 function profilePatchPath(dshHome) {
@@ -23,11 +22,11 @@ function profilePatchPath(dshHome) {
 }
 
 function scopeLinkPath(dshHome) {
-  return path.join(dshHome, 'profiles', 'node_modules', '@dsh-plugins');
+  return path.join(dshHome, 'profiles', 'node_modules', '@team-dsh-plugins');
 }
 
 function workspaceScopeLinkPath(repoRoot) {
-  return path.join(repoRoot, 'node_modules', '@dsh-plugins');
+  return path.join(repoRoot, 'node_modules', '@team-dsh-plugins');
 }
 
 function managedBlock(repoRoot) {
@@ -35,7 +34,7 @@ function managedBlock(repoRoot) {
   return [
     START_MARKER,
     '- insert:',
-    '    - id: dsh-plugins-workspace',
+    '    - id: team-dsh-plugins-workspace',
     "      name: 'cordis:include'",
     '      config:',
     `        path: ${JSON.stringify(registry)}`,
@@ -68,13 +67,6 @@ async function backupPatch(repoRoot, patchPath) {
   const backupDir = path.join(repoRoot, '.backups', stamp);
   await mkdir(backupDir, { recursive: true });
   await copyFile(patchPath, path.join(backupDir, 'cordis.patch.yml'));
-}
-
-async function backupDirectory(repoRoot, source, name) {
-  const stamp = new Date().toISOString().replaceAll(':', '-');
-  const backupDir = path.join(repoRoot, '.backups', stamp, name);
-  await mkdir(path.dirname(backupDir), { recursive: true });
-  await cp(source, backupDir, { recursive: true });
 }
 
 async function ensureScopeLink(repoRoot, dshHome) {
@@ -196,27 +188,6 @@ export async function validateWorkspace({ repoRoot }) {
   return { errors, warnings };
 }
 
-export async function migrateWorkspace({ repoRoot, dshHome }) {
-  const patchPath = profilePatchPath(dshHome);
-  if (await exists(patchPath)) {
-    const current = await readFile(patchPath, 'utf8');
-    const legacyEntry =
-      /(?:^#.*dsh-cost-meter.*\r?\n)?^- insert:\s*\r?\n\s+- id:\s*cost-meter\s*\r?\n\s+name:\s*['"]?dsh-cost-meter['"]?\s*(?:\r?\n|$)/gmu;
-    const next = current.replace(legacyEntry, '').replace(/\n{3,}/g, '\n\n');
-    if (next !== current) {
-      await backupPatch(repoRoot, patchPath);
-      await writeFile(patchPath, next);
-    }
-  }
-
-  const legacyDir = path.join(dshHome, 'profiles', 'node_modules', 'dsh-cost-meter');
-  if (await exists(legacyDir)) {
-    await backupDirectory(repoRoot, legacyDir, 'legacy-dsh-cost-meter');
-    await rm(legacyDir, { recursive: true });
-  }
-  await initWorkspace({ repoRoot, dshHome });
-}
-
 export function compatibilityStatus(version) {
   if (VERIFIED_DSH_VERSIONS.has(version)) return { supported: true };
   return {
@@ -247,10 +218,7 @@ export async function doctorWorkspace({ repoRoot, dshHome, dshVersion }) {
   try {
     const patch = await readFile(patchPath, 'utf8');
     if (!patch.includes(START_MARKER) || !patch.includes(END_MARKER)) {
-      errors.push('Web Profile 尚未接入 dsh-plugins 注册表');
-    }
-    if (/name:\s*['"]?dsh-cost-meter['"]?/u.test(patch)) {
-      errors.push('检测到旧版 dsh-cost-meter 注册，请运行 pnpm migrate');
+      errors.push('Web Profile 尚未接入 team-dsh-plugins 注册表');
     }
   } catch (error) {
     errors.push(`无法读取 Web Profile patch：${error.message}`);

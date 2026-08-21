@@ -17,13 +17,12 @@ import {
   doctorWorkspace,
   dshVersionProbe,
   initWorkspace,
-  migrateWorkspace,
   unlinkWorkspace,
   validateWorkspace,
 } from '../scripts/workspace.mjs';
 
 async function fixture() {
-  const root = await mkdtemp(path.join(os.tmpdir(), 'dsh-plugins-'));
+  const root = await mkdtemp(path.join(os.tmpdir(), 'team-dsh-plugins-'));
   const repoRoot = path.join(root, 'repo');
   const dshHome = path.join(root, '.dsh');
   await mkdir(path.join(repoRoot, 'plugins', 'cost-meter'), { recursive: true });
@@ -31,12 +30,12 @@ async function fixture() {
   await mkdir(path.join(dshHome, 'profiles', 'web'), { recursive: true });
   await writeFile(
     path.join(repoRoot, 'profiles', 'web.yml'),
-    "- id: cost-meter\n  name: '@dsh-plugins/cost-meter'\n",
+    "- id: cost-meter\n  name: '@team-dsh-plugins/cost-meter'\n",
   );
   await writeFile(
     path.join(repoRoot, 'plugins', 'cost-meter', 'package.json'),
     JSON.stringify({
-      name: '@dsh-plugins/cost-meter',
+      name: '@team-dsh-plugins/cost-meter',
       exports: { './client': './lib/client.js' },
       dsh: { client: { platform: 'web' } },
     }),
@@ -44,7 +43,7 @@ async function fixture() {
   await mkdir(path.join(repoRoot, 'plugins', 'cost-meter', 'lib'));
   await writeFile(
     path.join(repoRoot, 'plugins', 'cost-meter', 'lib', 'client.js'),
-    'window.__ModuleLoader__.load({ id: "@dsh-plugins/cost-meter", factory() {} });\n',
+    'window.__ModuleLoader__.load({ id: "@team-dsh-plugins/cost-meter", factory() {} });\n',
   );
   await writeFile(
     path.join(dshHome, 'profiles', 'web', 'cordis.patch.yml'),
@@ -64,15 +63,15 @@ test('init is idempotent and preserves the existing profile patch', async () => 
     'utf8',
   );
   assert.match(patch, /# existing user patch/);
-  assert.equal(patch.match(/>>> dsh-plugins managed include/g)?.length, 1);
+  assert.equal(patch.match(/>>> team-dsh-plugins managed include/g)?.length, 1);
   assert.match(
     patch,
     new RegExp(pathToFileURL(path.join(repoRoot, 'profiles', 'web.yml')).href),
   );
 
-  const link = path.join(dshHome, 'profiles', 'node_modules', '@dsh-plugins');
+  const link = path.join(dshHome, 'profiles', 'node_modules', '@team-dsh-plugins');
   assert.equal(await realpath(link), await realpath(path.join(repoRoot, 'plugins')));
-  const workspaceLink = path.join(repoRoot, 'node_modules', '@dsh-plugins');
+  const workspaceLink = path.join(repoRoot, 'node_modules', '@team-dsh-plugins');
   assert.equal(
     await realpath(workspaceLink),
     await realpath(path.join(repoRoot, 'plugins')),
@@ -94,11 +93,11 @@ test('unlink removes only workspace integration and preserves DSH data', async (
     path.join(dshHome, 'profiles', 'web', 'cordis.patch.yml'),
     'utf8',
   );
-  assert.doesNotMatch(patch, /dsh-plugins managed include/);
+  assert.doesNotMatch(patch, /team-dsh-plugins managed include/);
   assert.equal(await readFile(settings, 'utf8'), 'cost-meter:\n  currency: CNY\n');
   assert.equal(await readFile(storage, 'utf8'), '{"samples":[]}');
   await assert.rejects(
-    lstat(path.join(repoRoot, 'node_modules', '@dsh-plugins')),
+    lstat(path.join(repoRoot, 'node_modules', '@team-dsh-plugins')),
     { code: 'ENOENT' },
   );
 });
@@ -114,37 +113,6 @@ test('validate enforces registry, package, and client module identity', async ()
   const result = await validateWorkspace({ repoRoot });
   assert.equal(result.errors.length, 1);
   assert.match(result.errors[0], /client module id/);
-});
-
-test('migrate replaces the legacy registration and preserves plugin data', async () => {
-  const { repoRoot, dshHome } = await fixture();
-  const legacy = path.join(dshHome, 'profiles', 'node_modules', 'dsh-cost-meter');
-  await mkdir(legacy, { recursive: true });
-  await writeFile(path.join(legacy, 'package.json'), '{"name":"dsh-cost-meter"}');
-  await writeFile(
-    path.join(dshHome, 'profiles', 'web', 'cordis.patch.yml'),
-    [
-      '# dsh-cost-meter legacy entry',
-      '- insert:',
-      '    - id: cost-meter',
-      "      name: 'dsh-cost-meter'",
-      '',
-    ].join('\n'),
-  );
-  const storage = path.join(dshHome, 'storages', 'cost_meter.json');
-  await mkdir(path.dirname(storage), { recursive: true });
-  await writeFile(storage, '{"samples":[1]}');
-
-  await migrateWorkspace({ repoRoot, dshHome });
-
-  await assert.rejects(lstat(legacy), { code: 'ENOENT' });
-  const patch = await readFile(
-    path.join(dshHome, 'profiles', 'web', 'cordis.patch.yml'),
-    'utf8',
-  );
-  assert.doesNotMatch(patch, /name:\s*['"]?dsh-cost-meter/);
-  assert.match(patch, /dsh-plugins managed include/);
-  assert.equal(await readFile(storage, 'utf8'), '{"samples":[1]}');
 });
 
 test('unknown DSH versions warn and continue', () => {

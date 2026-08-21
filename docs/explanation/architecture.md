@@ -2,15 +2,15 @@
 
 ## 目标
 
-仓库需要同时满足三个约束：开发源码留在 monorepo、团队继续使用官方裸启动命令、DSH Home 仍负责运行时状态。
+仓库需要同时满足三个约束：开发源码留在 monorepo、继续使用官方裸启动命令、DSH Home 仍负责运行时状态。
 
 ## 组成
 
 ```text
-dsh_plugins/
+team_dsh_plugins/
 ├─ plugins/          # 受信任插件包
 ├─ profiles/         # 显式 Cordis 注册表
-├─ scripts/          # 接入、迁移与诊断
+├─ scripts/          # 接入与诊断
 ├─ test/             # 基础设施行为测试
 └─ docs/             # Diátaxis 文档与 ADR
 ```
@@ -18,8 +18,8 @@ dsh_plugins/
 初始化建立三处接点：
 
 1. Web Profile patch 中的受管 `cordis:include` 指向仓库 `profiles/web.yml`。
-2. 仓库 `node_modules/@dsh-plugins` 目录链接指向 `plugins/`，供嵌套 Include 的 Host Loader 解析。
-3. `$DSH_HOME/profiles/node_modules/@dsh-plugins` 目录链接同样指向 `plugins/`，供 Web Client module scanner 解析。
+2. 仓库 `node_modules/@team-dsh-plugins` 目录链接指向 `plugins/`，供嵌套 Include 的 Host Loader 解析。
+3. `$DSH_HOME/profiles/node_modules/@team-dsh-plugins` 目录链接同样指向 `plugins/`，供 Web Client module scanner 解析。
 
 第一处让 DSH 每次启动读取显式注册表；后两处让 Host Loader 和 Web Client module scanner 都能按同一包名解析插件。仅写绝对插件路径无法可靠支持 Web Client，因为其启动图以包名作为模块 ID。
 

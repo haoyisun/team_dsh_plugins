@@ -3,7 +3,7 @@
 // --dsw-* token 风格的下拉看板。由 client-modules 节点半以经典脚本方式加载，
 // 本文件必须保持 window.__ModuleLoader__.load 格式。
 window.__ModuleLoader__.load({
-	id: "@dsh-plugins/cost-meter",
+	id: "@team-dsh-plugins/cost-meter",
 	factory: (require) => {
 		var module = { exports: {} };
 		var exports = module.exports;

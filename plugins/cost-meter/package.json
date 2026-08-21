@@ -1,5 +1,5 @@
 {
-  "name": "@dsh-plugins/cost-meter",
+  "name": "@team-dsh-plugins/cost-meter",
   "version": "0.1.0",
   "description": "DSH 费用统计插件：记录每次 LLM 调用的 token 用量并按可配置单价计量费用，web 界面左上角展示今日消耗，点击面板查看今日/本周/本月/累计、历史每日消耗、模型明细与 DeepSeek 账号余额",
   "type": "module",

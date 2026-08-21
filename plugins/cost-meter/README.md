@@ -26,19 +26,14 @@ DSH（DeepSeek Harness）费用统计插件。
 
 ## 安装
 
-本插件由 `dsh_plugins` monorepo 统一注册为 `@dsh-plugins/cost-meter`。首次使用按仓库根目录 README 执行：
+本插件由 `team_dsh_plugins` monorepo 统一注册为 `@team-dsh-plugins/cost-meter`。首次使用按仓库根目录 README 执行：
 
 ```sh
 pnpm run init
+npx @deepseek-ai/dsh web
 ```
 
-从旧版手工复制安装迁移时执行：
-
-```sh
-pnpm run migrate
-```
-
-之后继续使用 `npx @deepseek-ai/dsh web` 启动。不要将插件源码复制进 `.dsh`，也不要手工修改 Profile 注册行。
+不要将插件源码复制进 `.dsh`，也不要手工修改 Profile 注册行。
 
 ## 配置
 

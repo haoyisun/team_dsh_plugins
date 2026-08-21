@@ -1,7 +1,17 @@
 {
-  "name": "dsh-plugins-workspace",
+  "name": "team-dsh-plugins",
   "version": "0.1.0",
   "private": true,
+  "description": "Open-source DeepSeek Harness plugin monorepo",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/haoyisun/team_dsh_plugins.git"
+  },
+  "bugs": {
+    "url": "https://github.com/haoyisun/team_dsh_plugins/issues"
+  },
+  "homepage": "https://github.com/haoyisun/team_dsh_plugins#readme",
   "type": "module",
   "packageManager": "pnpm@10.28.1",
   "engines": {
@@ -11,7 +21,6 @@
     "init": "node scripts/cli.mjs init",
     "doctor": "node scripts/cli.mjs doctor",
     "unlink": "node scripts/cli.mjs unlink",
-    "migrate": "node scripts/cli.mjs migrate",
     "validate": "node scripts/cli.mjs validate",
     "test": "node --test"
   },

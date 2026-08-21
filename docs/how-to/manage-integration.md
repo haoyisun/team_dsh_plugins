@@ -6,22 +6,7 @@
 pnpm run init
 ```
 
-命令使用 `$DSH_HOME`；未设置时使用用户目录下的 `.dsh`。它会备份并幂等更新 Web Profile patch，然后建立 `@dsh-plugins` scope 目录链接。
-
-## 迁移旧版 cost-meter
-
-```powershell
-pnpm run migrate
-pnpm run doctor
-```
-
-迁移移除旧的 `dsh-cost-meter` 注册和源码副本，但保留：
-
-- `.dsh/settings.yaml` 中的 `cost-meter`；
-- `.dsh/storages/cost_meter.json`；
-- DSH 会话数据。
-
-被替换内容备份在仓库 `.backups/`，该目录不进入版本控制。
+命令使用 `$DSH_HOME`；未设置时使用用户目录下的 `.dsh`。它会备份并幂等更新 Web Profile patch，然后建立 `@team-dsh-plugins` scope 目录链接。
 
 ## 诊断
 

@@ -5,9 +5,9 @@
 对于插件 `<id>`：
 
 - 目录：`plugins/<id>/`
-- npm 包名：`@dsh-plugins/<id>`
+- npm 包名：`@team-dsh-plugins/<id>`
 - Cordis entry ID：`<id>`
-- Web Client module ID：`@dsh-plugins/<id>`
+- Web Client module ID：`@team-dsh-plugins/<id>`
 - Settings namespace：`<id>`
 - Storage domain：将连字符替换为下划线的 `<id>`
 - 缓存目录：`$DSH_HOME/cache/<id>/`

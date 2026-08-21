@@ -12,9 +12,11 @@ corepack enable
 pnpm --version
 ```
 
-## 2. 安装仓库依赖
+## 2. 克隆并安装依赖
 
 ```powershell
+git clone https://github.com/haoyisun/team_dsh_plugins.git
+cd team_dsh_plugins
 pnpm install
 ```
 
@@ -24,7 +26,7 @@ pnpm install
 pnpm run init
 ```
 
-该命令只做一次性接入：在 Web Profile 中引用 `profiles/web.yml`，并让 `@dsh-plugins/*` 解析到本仓库的 `plugins/`。
+该命令只做一次性接入：在 Web Profile 中引用 `profiles/web.yml`，并让 `@team-dsh-plugins/*` 解析到本仓库的 `plugins/`。
 
 ## 4. 检查接入
 
@@ -41,5 +43,3 @@ npx @deepseek-ai/dsh web
 ```
 
 后续更新已有插件代码或修改注册表后，继续使用同一条官方命令。注册表由 DSH Include/HMR 读取，无需复制插件源码到 `.dsh`。
-
-已有旧版 `dsh-cost-meter` 手工安装时，执行 `pnpm run migrate`，不要执行普通初始化。

@@ -10,7 +10,6 @@ import {
   dshVersionProbe,
   doctorWorkspace,
   initWorkspace,
-  migrateWorkspace,
   unlinkWorkspace,
   validateWorkspace,
 } from './workspace.mjs';
@@ -65,14 +64,10 @@ try {
   } else if (command === 'unlink') {
     await unlinkWorkspace({ repoRoot, dshHome });
     console.log('已移除仓库接入；插件设置和数据保持不变。');
-  } else if (command === 'migrate') {
-    await requireValidWorkspace();
-    await migrateWorkspace({ repoRoot, dshHome });
-    console.log('已迁移旧版 dsh-cost-meter 安装并保留设置与数据。');
   } else if (command === 'validate') {
     report(await validateWorkspace({ repoRoot }));
   } else {
-    console.error('用法：node scripts/cli.mjs <init|doctor|unlink|migrate|validate>');
+    console.error('用法：node scripts/cli.mjs <init|doctor|unlink|validate>');
     process.exitCode = 1;
   }
 } catch (error) {
