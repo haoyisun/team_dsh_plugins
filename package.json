@@ -1,0 +1,21 @@
+{
+  "name": "dsh-plugins-workspace",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.28.1",
+  "engines": {
+    "node": "^22.19.0 || >=24.0.0"
+  },
+  "scripts": {
+    "init": "node scripts/cli.mjs init",
+    "doctor": "node scripts/cli.mjs doctor",
+    "unlink": "node scripts/cli.mjs unlink",
+    "migrate": "node scripts/cli.mjs migrate",
+    "validate": "node scripts/cli.mjs validate",
+    "test": "node --test"
+  },
+  "devDependencies": {
+    "yaml": "^2.9.0"
+  }
+}
