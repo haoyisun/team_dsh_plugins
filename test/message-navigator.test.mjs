@@ -187,7 +187,7 @@ test('history paging detects an in-place chat node revision', async () => {
   assert.equal(await registration.inject('rejecting-session').loadOlder(), 'failed');
 });
 
-test('navigation items include only user messages and number primary turns', async () => {
+test('navigation items number every user and steering prompt', async () => {
   const { helpers } = await loadClientModule();
   const result = helpers.buildNavigationItems(snapshot([
     {
@@ -246,7 +246,7 @@ test('navigation items include only user messages and number primary turns', asy
       time: Date.parse('2026-08-24T01:01:00Z'),
       preview: '继续完成 [图片]',
       steering: true,
-      turn: 1,
+      turn: 2,
     },
     {
       key: 'user:4',
@@ -254,22 +254,26 @@ test('navigation items include only user messages and number primary turns', asy
       time: Date.parse('2026-08-24T01:02:00Z'),
       preview: '第二条 提问',
       steering: false,
-      turn: 2,
+      turn: 3,
     },
   ]);
 });
 
-test('reading line selects the latest message that crossed 25 percent', async () => {
+test('focus line gives consecutive short questions distinct active positions', async () => {
   const { helpers } = await loadClientModule();
   const rows = [
-    { key: 'a', top: 80 },
-    { key: 'b', top: 240 },
-    { key: 'c', top: 560 },
+    { key: 'a', top: 100 },
+    { key: 'b', top: 480 },
+    { key: 'c', top: 510 },
   ];
 
-  assert.equal(helpers.activeIndexAtReadingLine(rows, 100, 900), 1);
-  assert.equal(helpers.activeIndexAtReadingLine(rows, -400, 400), 0);
-  assert.equal(helpers.activeIndexAtReadingLine(rows, 1000, 1800), 2);
+  assert.equal(helpers.activeIndexAtFocusLine(rows, 0, 1000), 1);
+  assert.equal(helpers.activeIndexAtFocusLine(rows, 20, 1020), 2);
+  assert.equal(helpers.activeIndexAtFocusLine(rows, -1000, -200), 0);
+  assert.equal(helpers.activeIndexAtFocusLine([
+    { index: 4, key: 'loaded-a', top: 100 },
+    { index: 5, key: 'loaded-b', top: 500 },
+  ], -1000, -200), 4);
 });
 
 test('wheel movement stays inside the rail and yields at its edges', async () => {
@@ -281,13 +285,72 @@ test('wheel movement stays inside the rail and yields at its edges', async () =>
   assert.deepEqual(helpers.railWheel(0, -80, 300), { next: 0, consumed: false });
 });
 
-test('automatic history loading stops at the event budget', async () => {
+test('history loading happens only near the top or by explicit request', async () => {
   const { helpers } = await loadClientModule();
 
-  assert.equal(helpers.shouldAutoLoad({ loadedEvents: 1_950, hasMore: true, loading: false }), true);
-  assert.equal(helpers.shouldAutoLoad({ loadedEvents: 2_000, hasMore: true, loading: false }), false);
-  assert.equal(helpers.shouldAutoLoad({ loadedEvents: 100, hasMore: false, loading: false }), false);
-  assert.equal(helpers.shouldAutoLoad({ loadedEvents: 100, hasMore: true, loading: true }), false);
+  assert.equal(helpers.shouldLoadOlderAtRailTop({
+    scrollTop: 40,
+    hasMore: true,
+    loading: false,
+    failed: false,
+  }), true);
+  assert.equal(helpers.shouldLoadOlderAtRailTop({
+    scrollTop: 200,
+    hasMore: true,
+    loading: false,
+    failed: false,
+  }), false);
+  assert.equal(helpers.shouldLoadOlderAtRailTop({
+    scrollTop: 20,
+    hasMore: true,
+    loading: true,
+    failed: false,
+  }), false);
+  assert.equal(helpers.shouldLoadOlderAtRailTop({
+    scrollTop: 20,
+    hasMore: true,
+    loading: false,
+    failed: true,
+  }), false);
+});
+
+test('rail virtualization keeps a small overscanned window', async () => {
+  const { helpers } = await loadClientModule();
+
+  assert.deepEqual(helpers.virtualRange({
+    count: 1_000,
+    scrollTop: 2_400,
+    viewportHeight: 480,
+    itemHeight: 24,
+    overscan: 5,
+  }), { start: 95, end: 125 });
+  assert.deepEqual(helpers.virtualRange({
+    count: 3,
+    scrollTop: 0,
+    viewportHeight: 480,
+    itemHeight: 24,
+    overscan: 5,
+  }), { start: 0, end: 3 });
+});
+
+test('pending steering messages get waiting turns and running replies are detectable', async () => {
+  const { helpers } = await loadClientModule();
+
+  assert.deepEqual(helpers.buildPendingItems([
+    { id: 'queued-1', placement: 'steering' },
+    { id: 'queued-2', placement: 'follow-up' },
+  ], 3), [
+    { key: 'pending:queued-1', turn: 4, pending: true, steering: true },
+  ]);
+  assert.equal(helpers.isReplying({ running: { turn: 4 } }), true);
+  assert.equal(helpers.isReplying({ running: null }), false);
+});
+
+test('narrow conversations use the compact navigator', async () => {
+  const { helpers } = await loadClientModule();
+
+  assert.equal(helpers.navigationMode(679), 'compact');
+  assert.equal(helpers.navigationMode(680), 'rail');
 });
 
 test('prepend restoration keeps the semantic anchor at the same viewport offset', async () => {

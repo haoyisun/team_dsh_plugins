@@ -24,6 +24,8 @@ importers:
         specifier: ^4.4.3
         version: 4.4.3
 
+  plugins/message-navigator: {}
+
 packages:
 
   '@deepseek-ai/cordis@4.0.1':
