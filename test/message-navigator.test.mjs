@@ -25,6 +25,24 @@ async function loadClientModule() {
   return { definition, helpers: module.__test };
 }
 
+function cssBlock(css, selector) {
+  const needle = `${selector}{`;
+  const start = css.indexOf(needle);
+  assert.notEqual(start, -1, `missing selector ${selector}`);
+  const from = start + needle.length;
+  const end = css.indexOf('}', from);
+  return css.slice(from, end);
+}
+
+function cssValue(block, property) {
+  const prefix = `${property}:`;
+  const start = block.indexOf(prefix);
+  if (start === -1) return undefined;
+  const from = start + prefix.length;
+  const end = block.indexOf(';', from);
+  return block.slice(from, end === -1 ? undefined : end);
+}
+
 function snapshot(nodes, order = nodes.map(node => node.key)) {
   const byKey = new Map(nodes.map(node => [node.key, node]));
   return {
@@ -344,6 +362,43 @@ test('pending steering messages get waiting turns and running replies are detect
   ]);
   assert.equal(helpers.isReplying({ running: { turn: 4 } }), true);
   assert.equal(helpers.isReplying({ running: null }), false);
+});
+
+test('rail markers sit on the track centerline with inactive dots at 7px', async () => {
+  const { helpers } = await loadClientModule();
+  const { css } = helpers;
+
+  const item = cssBlock(css, '.mn-item');
+  assert.equal(cssValue(item, 'left'), '2px');
+  assert.equal(cssValue(item, 'width'), '24px');
+  assert.equal(cssValue(item, 'appearance'), 'none');
+  assert.equal(cssValue(item, 'font'), 'inherit');
+
+  const active = cssBlock(css, '.mn-itemActive');
+  assert.equal(cssValue(active, 'left'), '0');
+  assert.equal(cssValue(active, 'width'), '28px');
+  assert.equal(css.includes('.mn-itemSteering:not(.mn-itemActive)'), false);
+
+  const dot = cssBlock(css, '.mn-dot');
+  assert.equal(cssValue(dot, 'width'), '5px');
+  assert.equal(cssValue(dot, 'display'), 'block');
+  assert.equal(cssValue(dot, 'flex'), 'none');
+  assert.equal(cssValue(dot, 'aspect-ratio'), '1');
+  assert.equal(cssValue(dot, 'min-height'), '0');
+  const inactiveDot = cssBlock(
+    css,
+    '.mn-item:not(.mn-itemActive):not(.mn-itemSteering):not(.mn-itemPending) .mn-dot',
+  );
+  assert.equal(cssValue(inactiveDot, 'width'), '7px');
+  assert.equal(cssValue(inactiveDot, 'height'), '7px');
+  assert.equal(cssValue(cssBlock(css, '.mn-itemSteering .mn-dot'), 'width'), '4px');
+  assert.equal(cssValue(cssBlock(css, '.mn-itemPending .mn-dot'), 'width'), '7px');
+  assert.equal(cssValue(cssBlock(css, '.mn-itemActive .mn-dot'), 'width'), undefined);
+
+  const line = cssBlock(css, '.mn-items:before');
+  assert.equal(cssValue(line, 'left'), '14px');
+  assert.equal(cssValue(cssBlock(css, '.mn-status'), 'left'), '5px');
+  assert.equal(cssValue(cssBlock(css, '.mn-streaming'), 'left'), '5px');
 });
 
 test('narrow conversations use the compact navigator', async () => {
