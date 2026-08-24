@@ -6,6 +6,8 @@
 
 校验仓库后，将 `profiles/web.yml` 作为嵌套 Cordis Include 接入 DSH Web Profile，并建立 `@team-dsh-plugins` scope 目录链接。可重复执行。
 
+仓库路径改变后再次执行时，命令会更新 Profile 引用，并自动替换指向旧仓库或目标已不存在的 scope 链接。它不会覆盖同名真实目录。
+
 ## `pnpm run doctor`
 
 检查：

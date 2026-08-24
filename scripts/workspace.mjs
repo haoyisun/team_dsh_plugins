@@ -71,6 +71,7 @@ async function backupPatch(repoRoot, patchPath) {
 
 async function ensureScopeLink(repoRoot, dshHome) {
   const target = path.resolve(repoRoot, 'plugins');
+  const expected = await realpath(target);
   const links = [workspaceScopeLinkPath(repoRoot), scopeLinkPath(dshHome)];
   for (const link of links) {
     await mkdir(path.dirname(link), { recursive: true });
@@ -79,7 +80,13 @@ async function ensureScopeLink(repoRoot, dshHome) {
       if (!stat.isSymbolicLink()) {
         throw new Error(`Refusing to replace non-link path: ${link}`);
       }
-      if ((await realpath(link)) === (await realpath(target))) continue;
+      let actual;
+      try {
+        actual = await realpath(link);
+      } catch (error) {
+        if (error.code !== 'ENOENT') throw error;
+      }
+      if (actual === expected) continue;
       await rm(link);
     }
     await symlink(target, link, process.platform === 'win32' ? 'junction' : 'dir');

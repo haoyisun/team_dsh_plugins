@@ -11,6 +11,7 @@ npx @deepseek-ai/dsh web
 | 插件 | 状态 | 说明 |
 |---|---|---|
 | [`@team-dsh-plugins/cost-meter`](plugins/cost-meter) | 可用 | 自动记录模型调用的 token 用量，按可配置的峰谷单价估算费用；在 DSH Web 中展示今日、本周、本月及累计消费、每日趋势、模型明细和 DeepSeek 账户余额。 |
+| [`@team-dsh-plugins/message-navigator`](plugins/message-navigator) | 可用 | 在长会话正文右侧显示用户提问里程碑，支持滚轮浏览、悬停预览、当前位置高亮和一键平滑定位。 |
 
 ## 快速开始
 

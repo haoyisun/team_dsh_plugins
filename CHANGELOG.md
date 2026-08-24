@@ -4,6 +4,14 @@
 
 ## [Unreleased]
 
+### Added
+
+- 新增 `@team-dsh-plugins/message-navigator`，通过可滚动里程碑轨道预览并定位长会话中的用户提问。
+
+### Fixed
+
+- `pnpm run init` 现在会在仓库迁移后自动替换指向旧路径或已经悬空的插件 scope 链接。
+
 ## [0.1.0] - 2026-08-21
 
 ### Added

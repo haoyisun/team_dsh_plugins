@@ -26,4 +26,14 @@ pnpm run unlink
 
 ## 更换仓库路径
 
-移动或重新 clone 仓库后，在新路径运行 `pnpm run init`。工具会重建受管路径引用；不要手工复制插件到 `.dsh/profiles/node_modules`。
+移动已有仓库后，先重建 pnpm 依赖链接，再重新初始化接入：
+
+```powershell
+pnpm install --force
+pnpm run init
+pnpm run doctor
+```
+
+重新 clone 到新路径时，使用普通的 `pnpm install`，然后运行 `init` 和 `doctor`。
+
+`init` 会自动替换指向旧仓库或目标已经不存在的受管 scope 链接，并更新 Web Profile 中的仓库引用。为避免覆盖用户文件，同名路径如果是真实目录而不是符号链接或 Junction，命令仍会报错并停止。不要手工复制插件到 `.dsh/profiles/node_modules`。

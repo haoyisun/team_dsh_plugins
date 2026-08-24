@@ -5,6 +5,8 @@ import {
   mkdir,
   readFile,
   realpath,
+  rm,
+  symlink,
   writeFile,
 } from 'node:fs/promises';
 import os from 'node:os';
@@ -76,6 +78,27 @@ test('init is idempotent and preserves the existing profile patch', async () => 
     await realpath(workspaceLink),
     await realpath(path.join(repoRoot, 'plugins')),
   );
+});
+
+test('init replaces dangling scope links after the repository moves', async () => {
+  const { root, repoRoot, dshHome } = await fixture();
+  const oldPlugins = path.join(root, 'old-repo', 'plugins');
+  const links = [
+    path.join(repoRoot, 'node_modules', '@team-dsh-plugins'),
+    path.join(dshHome, 'profiles', 'node_modules', '@team-dsh-plugins'),
+  ];
+  await mkdir(oldPlugins, { recursive: true });
+  for (const link of links) {
+    await mkdir(path.dirname(link), { recursive: true });
+    await symlink(oldPlugins, link, process.platform === 'win32' ? 'junction' : 'dir');
+  }
+  await rm(path.join(root, 'old-repo'), { recursive: true });
+
+  await initWorkspace({ repoRoot, dshHome });
+
+  for (const link of links) {
+    assert.equal(await realpath(link), await realpath(path.join(repoRoot, 'plugins')));
+  }
 });
 
 test('unlink removes only workspace integration and preserves DSH data', async () => {

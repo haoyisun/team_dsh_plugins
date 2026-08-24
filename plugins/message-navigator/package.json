@@ -1,0 +1,23 @@
+{
+  "name": "@team-dsh-plugins/message-navigator",
+  "version": "0.1.0",
+  "description": "DSH Web 长会话消息导航：用可滚动里程碑轨道快速预览并定位用户提问",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./lib/client.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "README.md"
+  ],
+  "dsh": {
+    "client": {
+      "platform": "web",
+      "inject": []
+    }
+  },
+  "license": "MIT"
+}
