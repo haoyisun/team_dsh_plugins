@@ -2,3 +2,4 @@
   name: '@team-dsh-plugins/cost-meter'
 - id: message-navigator
   name: '@team-dsh-plugins/message-navigator'
+  disabled: true

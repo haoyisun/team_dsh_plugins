@@ -23,6 +23,7 @@ pnpm test
 
 ```powershell
 pnpm run init
+pnpm run sync:external
 pnpm run doctor
 npx @deepseek-ai/dsh web
 ```
@@ -32,7 +33,9 @@ npx @deepseek-ai/dsh web
 - 每个 PR 只做一件事：新增插件、修复、文档或基础设施。
 - 行为变更先写失败测试，再实现。
 - 提交前运行 `pnpm run validate` 和 `pnpm test`。
-- 插件包名必须是 `@team-dsh-plugins/<id>`，并显式登记到 `profiles/web.yml`。
+- 工作区插件包名必须是 `@team-dsh-plugins/<id>`，并显式登记到 `profiles/web.yml`。
+- 外源插件只登记 npm 包名、精确版本和 Bundle entries，不接受路径、URL、git spec 或工作区 scope；变更必须审查发布者及版本。
+- MCP 实例登记到 `profiles/web.mcp.yml`；本机路径和认证信息必须通过受限环境变量表达式提供。
 - 架构或公共契约变化必须新增 ADR，并更新对应 Reference。
 - 不要提交密钥、`.dsh`、`.backups`、本机绝对路径或运行数据。
 - 提交信息使用 `type: 简短说明`，例如 `feat:`、`fix:`、`docs:`、`chore:`。

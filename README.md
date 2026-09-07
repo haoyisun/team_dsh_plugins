@@ -23,15 +23,21 @@ cd team_dsh_plugins
 corepack enable
 pnpm install
 pnpm run init
+pnpm run sync:external
 pnpm run doctor
 npx @deepseek-ai/dsh web
 ```
 
 `pnpm run init` 会在默认或 `$DSH_HOME` 指定的 DSH Home 中登记本仓库，并建立 `@team-dsh-plugins` 目录映射。被修改的 Profile patch 会备份到仓库 `.backups/`（不进入版本控制）。
 
+`profiles/web.external.yml` 可声明经过审查的 npm 外源插件及精确版本。`pnpm run sync:external` 通过官方 DSH plugin 流程安装并同步启停状态；空清单不会安装任何内容。
+
+`profiles/web.mcp.yml` 管理 MCP Client 实例；命令、路径和认证信息通过仓库根目录下不入库的 `.env` 提供。
+
 ## 常用命令
 
 - `pnpm run init`：将当前仓库接入 DSH Home。
+- `pnpm run sync:external`：安装精确版本的外源插件并同步禁用覆盖，不自动卸载。
 - `pnpm run doctor`：检查仓库、Profile、目录链接和 DSH 版本。
 - `pnpm run unlink`：移除仓库接入，不删除插件设置和数据。
 - `pnpm run validate`：校验注册表、包名和 Client module ID。
@@ -41,6 +47,8 @@ npx @deepseek-ai/dsh web
 
 - [入门教程](docs/tutorials/getting-started.md)
 - [新增插件](docs/how-to/add-plugin.md)
+- [添加和管理外源插件](docs/how-to/manage-external-plugins.md)
+- [添加和管理 MCP Server](docs/how-to/manage-mcp-servers.md)
 - [管理 DSH 接入](docs/how-to/manage-integration.md)
 - [升级 DSH](docs/how-to/upgrade-dsh.md)
 - [架构说明](docs/explanation/architecture.md)

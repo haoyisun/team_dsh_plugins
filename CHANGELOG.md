@@ -7,6 +7,8 @@
 ### Added
 
 - 新增 `@team-dsh-plugins/message-navigator`，通过可滚动里程碑轨道预览并定位长会话中的用户提问。
+- 新增 `profiles/web.external.yml` 和 `pnpm run sync:external`，以精确版本安全同步外源 DSH 插件及其禁用状态。
+- 新增 `profiles/web.mcp.yml`，通过独立受管 Include 和环境变量安全管理 MCP Client 实例。
 
 ### Changed
 

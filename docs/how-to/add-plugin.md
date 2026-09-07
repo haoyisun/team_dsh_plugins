@@ -1,5 +1,7 @@
 # 新增插件
 
+本页只适用于仓库内维护的工作区插件。消费 npm 外源插件请参阅[添加和管理外源插件](manage-external-plugins.md)。
+
 ## 1. 创建包
 
 在 `plugins/<id>/` 创建 npm 包，包名必须为 `@team-dsh-plugins/<id>`。Host 入口导出 Cordis `apply`；Web 双端插件还必须：

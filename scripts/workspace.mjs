@@ -12,6 +12,16 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { parse } from 'yaml';
 
+import {
+  diagnoseExternalPlugins,
+  readExternalRegistry,
+  validateExternalRegistry,
+} from './external-plugins.mjs';
+import {
+  readMcpRegistry,
+  validateMcpRegistry,
+} from './mcp-registry.mjs';
+
 const START_MARKER = '# >>> team-dsh-plugins managed include >>>';
 const END_MARKER = '# <<< team-dsh-plugins managed include <<<';
 const PLUGIN_SCOPE = '@team-dsh-plugins/';
@@ -30,14 +40,19 @@ function workspaceScopeLinkPath(repoRoot) {
 }
 
 function managedBlock(repoRoot) {
-  const registry = pathToFileURL(path.join(repoRoot, 'profiles', 'web.yml')).href;
+  const workspaceRegistry = pathToFileURL(path.join(repoRoot, 'profiles', 'web.yml')).href;
+  const mcpRegistry = pathToFileURL(path.join(repoRoot, 'profiles', 'web.mcp.yml')).href;
   return [
     START_MARKER,
     '- insert:',
     '    - id: team-dsh-plugins-workspace',
     "      name: 'cordis:include'",
     '      config:',
-    `        path: ${JSON.stringify(registry)}`,
+    `        path: ${JSON.stringify(workspaceRegistry)}`,
+    '    - id: team-dsh-plugins-mcp',
+    "      name: 'cordis:include'",
+    '      config:',
+    `        path: ${JSON.stringify(mcpRegistry)}`,
     END_MARKER,
   ].join('\n');
 }
@@ -192,6 +207,23 @@ export async function validateWorkspace({ repoRoot }) {
       errors.push(`插件 ${entry.id} 的 Client bundle 无法读取：${error.message}`);
     }
   }
+
+  try {
+    const externalEntries = await readExternalRegistry({ repoRoot });
+    const external = validateExternalRegistry(externalEntries);
+    errors.push(...external.errors);
+    warnings.push(...external.warnings);
+  } catch (error) {
+    errors.push(`无法读取 profiles/web.external.yml：${error.message}`);
+  }
+  try {
+    const mcpEntries = await readMcpRegistry({ repoRoot });
+    const mcp = validateMcpRegistry(mcpEntries);
+    errors.push(...mcp.errors);
+    warnings.push(...mcp.warnings);
+  } catch (error) {
+    errors.push(`无法读取 profiles/web.mcp.yml：${error.message}`);
+  }
   return { errors, warnings };
 }
 
@@ -221,11 +253,21 @@ export async function doctorWorkspace({ repoRoot, dshHome, dshVersion }) {
   const result = await validateWorkspace({ repoRoot });
   const errors = [...result.errors];
   const warnings = [...result.warnings];
+  if (errors.length === 0) {
+    const external = await diagnoseExternalPlugins({ repoRoot, dshHome });
+    errors.push(...external.errors);
+    warnings.push(...external.warnings);
+  }
   const patchPath = profilePatchPath(dshHome);
   try {
     const patch = await readFile(patchPath, 'utf8');
     if (!patch.includes(START_MARKER) || !patch.includes(END_MARKER)) {
       errors.push('Web Profile 尚未接入 team-dsh-plugins 注册表');
+    } else {
+      const mcpRegistry = pathToFileURL(path.join(repoRoot, 'profiles', 'web.mcp.yml')).href;
+      if (!patch.includes(mcpRegistry)) {
+        errors.push('Web Profile 尚未接入 MCP 注册表');
+      }
     }
   } catch (error) {
     errors.push(`无法读取 Web Profile patch：${error.message}`);

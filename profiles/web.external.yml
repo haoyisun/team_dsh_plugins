@@ -1,0 +1,5 @@
+- package: dsh-context
+  version: '0.44.0'
+  entries:
+    - id: dsh-context
+      name: dsh-context

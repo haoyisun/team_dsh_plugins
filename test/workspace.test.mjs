@@ -34,6 +34,8 @@ async function fixture() {
     path.join(repoRoot, 'profiles', 'web.yml'),
     "- id: cost-meter\n  name: '@team-dsh-plugins/cost-meter'\n",
   );
+  await writeFile(path.join(repoRoot, 'profiles', 'web.external.yml'), '[]\n');
+  await writeFile(path.join(repoRoot, 'profiles', 'web.mcp.yml'), '[]\n');
   await writeFile(
     path.join(repoRoot, 'plugins', 'cost-meter', 'package.json'),
     JSON.stringify({
@@ -70,6 +72,11 @@ test('init is idempotent and preserves the existing profile patch', async () => 
     patch,
     new RegExp(pathToFileURL(path.join(repoRoot, 'profiles', 'web.yml')).href),
   );
+  assert.match(
+    patch,
+    new RegExp(pathToFileURL(path.join(repoRoot, 'profiles', 'web.mcp.yml')).href),
+  );
+  assert.equal(patch.match(/team-dsh-plugins-mcp/g)?.length, 1);
 
   const link = path.join(dshHome, 'profiles', 'node_modules', '@team-dsh-plugins');
   assert.equal(await realpath(link), await realpath(path.join(repoRoot, 'plugins')));
@@ -136,6 +143,37 @@ test('validate enforces registry, package, and client module identity', async ()
   const result = await validateWorkspace({ repoRoot });
   assert.equal(result.errors.length, 1);
   assert.match(result.errors[0], /client module id/);
+});
+
+test('validate includes the external plugin registry contract', async () => {
+  const { repoRoot } = await fixture();
+  await writeFile(
+    path.join(repoRoot, 'profiles', 'web.external.yml'),
+    "- package: dsh-context\n  version: latest\n  entries: []\n",
+  );
+
+  const result = await validateWorkspace({ repoRoot });
+
+  assert.match(result.errors.join('\n'), /精确 semver/);
+  assert.match(result.errors.join('\n'), /至少一个 Bundle entry/);
+});
+
+test('validate includes the MCP registry contract', async () => {
+  const { repoRoot } = await fixture();
+  await writeFile(
+    path.join(repoRoot, 'profiles', 'web.mcp.yml'),
+    `- id: mcp-local
+  name: '@deepseek-ai/dsh-mcp-client'
+  config:
+    serverName: local
+    transport: stdio
+    command: C:\\NodeJS\\node.exe
+`,
+  );
+
+  const result = await validateWorkspace({ repoRoot });
+
+  assert.match(result.errors.join('\n'), /本机绝对路径/);
 });
 
 test('unknown DSH versions warn and continue', () => {

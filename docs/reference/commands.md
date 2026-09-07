@@ -4,7 +4,7 @@
 
 ## `pnpm run init`
 
-校验仓库后，将 `profiles/web.yml` 作为嵌套 Cordis Include 接入 DSH Web Profile，并建立 `@team-dsh-plugins` scope 目录链接。可重复执行。
+校验仓库后，将 `profiles/web.yml` 和 `profiles/web.mcp.yml` 作为嵌套 Cordis Include 接入 DSH Web Profile，并建立 `@team-dsh-plugins` scope 目录链接。可重复执行。
 
 仓库路径改变后再次执行时，命令会更新 Profile 引用，并自动替换指向旧仓库或目标已不存在的 scope 链接。它不会覆盖同名真实目录。
 
@@ -15,6 +15,8 @@
 - 注册表、package manifest 和 Client module ID；
 - Web Profile 受管 Include；
 - scope 链接目标；
+- MCP 注册表结构和接入路径；
+- 外源插件安装版本与受管禁用覆盖；
 - 当前 DSH 版本是否经过验证。
 
 未知版本产生告警，其他接入错误返回非零退出码。
@@ -25,7 +27,19 @@
 
 ## `pnpm run validate`
 
-只检查仓库静态契约，不读取或修改 `.dsh`。
+只检查工作区、外源和 MCP 注册表的静态契约，不读取或修改 `.dsh`。
+
+## `pnpm run sync:external`
+
+读取 `profiles/web.external.yml`，对缺失或版本漂移的包调用：
+
+```powershell
+npx @deepseek-ai/dsh plugin --profile web add --save-exact <package>@<version>
+```
+
+命令会验证包是 Web Profile 的精确直接依赖、已经加入 Bundle 层，且实际 Bundle entries 与声明一致；随后同步 Web Profile patch 中的受管禁用覆盖。它不会卸载未声明插件，也不会删除插件设置、数据、缓存或凭据。声明删除后保留最后启停状态，`doctor` 会将遗留覆盖报告为脱管。
+
+操作示例和 `entries` 获取方法见[添加和管理外源插件](../how-to/manage-external-plugins.md)。
 
 ## `pnpm test`
 

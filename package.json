@@ -22,6 +22,7 @@
     "doctor": "node scripts/cli.mjs doctor",
     "unlink": "node scripts/cli.mjs unlink",
     "validate": "node scripts/cli.mjs validate",
+    "sync:external": "node scripts/cli.mjs sync-external",
     "test": "node --test"
   },
   "devDependencies": {

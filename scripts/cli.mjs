@@ -13,6 +13,7 @@ import {
   unlinkWorkspace,
   validateWorkspace,
 } from './workspace.mjs';
+import { syncExternalPlugins } from './external-plugins.mjs';
 
 const execFileAsync = promisify(execFile);
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -66,8 +67,19 @@ try {
     console.log('已移除仓库接入；插件设置和数据保持不变。');
   } else if (command === 'validate') {
     report(await validateWorkspace({ repoRoot }));
+  } else if (command === 'sync-external') {
+    await requireValidWorkspace();
+    const result = await syncExternalPlugins({ repoRoot, dshHome });
+    report(result);
+    console.log(
+      result.actions.length > 0
+        ? `已同步外源插件：${result.actions.join(', ')}`
+        : '外源插件已是期望状态。',
+    );
   } else {
-    console.error('用法：node scripts/cli.mjs <init|doctor|unlink|validate>');
+    console.error(
+      '用法：node scripts/cli.mjs <init|doctor|unlink|validate|sync-external>',
+    );
     process.exitCode = 1;
   }
 } catch (error) {
