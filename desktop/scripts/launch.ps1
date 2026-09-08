@@ -9,7 +9,7 @@ $electron = Join-Path $desktopRoot 'node_modules\electron\dist\electron.exe'
 if (-not (Test-Path $electron)) {
     Add-Type -AssemblyName PresentationFramework
     [System.Windows.MessageBox]::Show(
-        "DSH Desktop 尚未安装依赖。请在以下目录运行 pnpm install：`n$desktopRoot",
+        "DSH Desktop dependencies are missing. Run pnpm install in:`n$desktopRoot",
         'DSH Desktop',
         'OK',
         'Error'
@@ -30,5 +30,17 @@ if (-not (Test-Path $icon)) {
 }
 
 Set-Location $desktopRoot
-& pnpm exec electron .
-exit $LASTEXITCODE
+& $electron $desktopRoot
+$exitCode = $LASTEXITCODE
+
+if ($exitCode -ne 0) {
+    Add-Type -AssemblyName PresentationFramework
+    [System.Windows.MessageBox]::Show(
+        "DSH Desktop exited during startup (exit code $exitCode).",
+        'DSH Desktop',
+        'OK',
+        'Error'
+    ) | Out-Null
+}
+
+exit $exitCode

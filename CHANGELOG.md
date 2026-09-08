@@ -17,10 +17,13 @@
 - 外源插件以 DSH Web Profile 实际状态为准；`init` 会安全迁移旧方案留下的禁用覆盖。
 - MCP 管理器支持粘贴 JSON/JSONC/YAML 第三方配置和 DSH Profile MCP patch、安全预检及批量禁用导入；单实例可以在一次确认中测试、保存并启用，已启用实例只有在候选配置测试通过后才会切换。
 - MCP 管理界面改用 DSH Web 原生控件，明确必填项、折叠高级设置，并为启停、测试、重新启动、工具查看和删除提供局部进度与结果反馈。
+- DSH Desktop 改用高分辨率 DeepSeek 风格鱼形图标。
 
 ### Fixed
 
 - `pnpm run init` 现在会在仓库迁移后自动替换指向旧路径或已经悬空的插件 scope 链接。
+- Windows PowerShell 5.1 现在可以正确解析桌面快捷方式创建与启动脚本。
+- DSH Desktop 快捷方式直接调用本地 Electron，不再依赖 Explorer 环境中的 `pnpm` PATH；启动异常会显示退出码而不是静默闪退。
 
 ### Removed
 

@@ -7,7 +7,7 @@ $electron = Join-Path $desktopRoot 'node_modules\electron\dist\electron.exe'
 $icon = Join-Path $desktopRoot 'bin\app-icon.ico'
 
 if (-not (Test-Path $electron)) {
-    throw "请先在 $desktopRoot 运行 pnpm install。"
+    throw "Run pnpm install in $desktopRoot first."
 }
 if (-not (Test-Path $icon)) {
     & node (Join-Path $PSScriptRoot 'build-icon.mjs')
@@ -27,7 +27,7 @@ $shortcut.Arguments = (
 )
 $shortcut.WorkingDirectory = $desktopRoot
 $shortcut.IconLocation = "$icon,0"
-$shortcut.Description = '启动并管理 DSH Web'
+$shortcut.Description = 'Launch and manage DSH Web'
 $shortcut.Save()
 
-Write-Host "已创建桌面快捷方式：$shortcutPath"
+Write-Host "Created desktop shortcut: $shortcutPath"
