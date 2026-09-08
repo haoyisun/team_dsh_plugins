@@ -605,7 +605,7 @@ window.__ModuleLoader__.load({
 							onSelect: selectMenu,
 							anchor: h(Button, {
 								size: "sm",
-								variant: "toolbar",
+								variant: "ghost",
 								icon: h(IconEllipsisOutline16, { size: 16 }),
 								disabled: busy,
 								"aria-label": t("moreActions"),
