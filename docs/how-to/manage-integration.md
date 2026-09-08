@@ -6,7 +6,7 @@
 pnpm run init
 ```
 
-命令使用 `$DSH_HOME`；未设置时使用用户目录下的 `.dsh`。它会备份并幂等更新 Web Profile patch，将工作区插件和 MCP 注册表作为两个 Include 接入，然后建立 `@team-dsh-plugins` scope 目录链接。
+命令使用 `$DSH_HOME`；未设置时使用用户目录下的 `.dsh`。它会备份并幂等更新 Web Profile patch，将工作区插件注册表作为 Include 接入，然后建立 `@team-dsh-plugins` scope 目录链接。
 
 ## 诊断
 
@@ -14,34 +14,19 @@ pnpm run init
 pnpm run doctor
 ```
 
-错误表示接入不可用；未知 DSH 版本是告警，不阻止继续运行。插件协议级不兼容时，在对应的工作区或外源注册表中将条目标记为 `disabled: true`。
+错误表示接入不可用；未知 DSH 版本是告警，不阻止继续运行。工作区插件协议不兼容时，在 `profiles/web.yml` 中将对应条目标记为 `disabled: true`。
 
-## 同步外源插件
+## 管理外源插件
 
-在 `profiles/web.external.yml` 声明经过审查的 npm 包、精确版本、Bundle entries 和 `disabled` 状态，然后执行：
+启动 DSH 后打开设置侧边栏中的“插件管理”。该页面读取当前 Web Profile 的实际状态，并通过官方 DSH plugin 流程添加、删除、检查更新和更改 npm 外源插件版本。
 
-```powershell
-pnpm run sync:external
-pnpm run doctor
-```
-
-同步命令通过官方 DSH plugin 流程安装缺失版本或对齐版本，并将禁用状态写入 Web Profile 的独立受管覆盖。它不会在 `init` 或启动时自动联网。
-
-从清单删除条目只会停止仓库继续管理该插件：已安装包及最后启停状态保持不变。确认不再需要后，手工卸载：
-
-```powershell
-npx @deepseek-ai/dsh plugin --profile web remove <package>
-```
-
-外源包会以当前用户权限执行。提交清单变更前应核对包名、发布者、版本和 Bundle entry 身份，不要使用 `latest`、版本范围、URL、git spec 或文件路径。
-
-完整的添加、禁用、启用、升级和卸载步骤见[添加和管理外源插件](manage-external-plugins.md)。
+外源包会以当前用户权限执行。管理器只接受 npm registry 包名、`latest` 或精确 semver，不接受版本范围、其他 tag、URL、git spec 或文件路径。Bundle 变更后需重启 DSH Web。完整步骤和紧急恢复命令见[添加和管理外源插件](manage-plugins.md)。
 
 ## 管理 MCP Server
 
-MCP Client 实例登记在 `profiles/web.mcp.yml`，不走外源插件安装流程。本机命令、路径和认证信息应放在不入库的 `.env` 中，通过受限的 `!!js process.env.NAME` 表达式引用。
+启动 DSH 后打开设置侧边栏中的“MCP 管理”。该页面管理全局 stdio 和 Streamable HTTP 连接，支持测试、启停、重载和删除。
 
-完整步骤见[添加和管理 MCP Server](manage-mcp-servers.md)。
+实例配置及凭据属于 DSH Home，不写入本仓库。插件只管理连接，不安装或升级 MCP Server。
 
 ## 解除接入
 

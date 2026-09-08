@@ -34,8 +34,6 @@ async function fixture() {
     path.join(repoRoot, 'profiles', 'web.yml'),
     "- id: cost-meter\n  name: '@team-dsh-plugins/cost-meter'\n",
   );
-  await writeFile(path.join(repoRoot, 'profiles', 'web.external.yml'), '[]\n');
-  await writeFile(path.join(repoRoot, 'profiles', 'web.mcp.yml'), '[]\n');
   await writeFile(
     path.join(repoRoot, 'plugins', 'cost-meter', 'package.json'),
     JSON.stringify({
@@ -72,11 +70,7 @@ test('init is idempotent and preserves the existing profile patch', async () => 
     patch,
     new RegExp(pathToFileURL(path.join(repoRoot, 'profiles', 'web.yml')).href),
   );
-  assert.match(
-    patch,
-    new RegExp(pathToFileURL(path.join(repoRoot, 'profiles', 'web.mcp.yml')).href),
-  );
-  assert.equal(patch.match(/team-dsh-plugins-mcp/g)?.length, 1);
+  assert.doesNotMatch(patch, /team-dsh-plugins-mcp/);
 
   const link = path.join(dshHome, 'profiles', 'node_modules', '@team-dsh-plugins');
   assert.equal(await realpath(link), await realpath(path.join(repoRoot, 'plugins')));
@@ -145,39 +139,62 @@ test('validate enforces registry, package, and client module identity', async ()
   assert.match(result.errors[0], /client module id/);
 });
 
-test('validate includes the external plugin registry contract', async () => {
-  const { repoRoot } = await fixture();
+test('init removes an obsolete empty external override block', async () => {
+  const { repoRoot, dshHome } = await fixture();
+  const patchPath = path.join(dshHome, 'profiles', 'web', 'cordis.patch.yml');
   await writeFile(
-    path.join(repoRoot, 'profiles', 'web.external.yml'),
-    "- package: dsh-context\n  version: latest\n  entries: []\n",
+    patchPath,
+    [
+      '# >>> team-dsh-plugins managed external overrides >>>',
+      '- id: stale-entry',
+      '  name: stale-entry',
+      '  disabled: false',
+      '# <<< team-dsh-plugins managed external overrides <<<',
+      '',
+    ].join('\n'),
   );
 
-  const result = await validateWorkspace({ repoRoot });
+  await initWorkspace({ repoRoot, dshHome });
 
-  assert.match(result.errors.join('\n'), /精确 semver/);
-  assert.match(result.errors.join('\n'), /至少一个 Bundle entry/);
+  const patch = await readFile(patchPath, 'utf8');
+  assert.doesNotMatch(patch, /managed external overrides/);
+  assert.doesNotMatch(patch, /stale-entry/);
+  assert.match(patch, /team-dsh-plugins managed include/);
 });
 
-test('validate includes the MCP registry contract', async () => {
-  const { repoRoot } = await fixture();
+test('init preserves legacy disabled entries without retaining ownership markers', async () => {
+  const { repoRoot, dshHome } = await fixture();
+  const patchPath = path.join(dshHome, 'profiles', 'web', 'cordis.patch.yml');
   await writeFile(
-    path.join(repoRoot, 'profiles', 'web.mcp.yml'),
-    `- id: mcp-local
-  name: '@deepseek-ai/dsh-mcp-client'
-  config:
-    serverName: local
-    transport: stdio
-    command: C:\\NodeJS\\node.exe
-`,
+    patchPath,
+    [
+      '# user patch',
+      '- id: user-setting',
+      '  disabled: true',
+      '# >>> team-dsh-plugins managed external overrides >>>',
+      '- id: dsh-context',
+      '  name: dsh-context',
+      '  disabled: true',
+      '# <<< team-dsh-plugins managed external overrides <<<',
+      '',
+    ].join('\n'),
   );
 
-  const result = await validateWorkspace({ repoRoot });
+  await initWorkspace({ repoRoot, dshHome });
+  await initWorkspace({ repoRoot, dshHome });
 
-  assert.match(result.errors.join('\n'), /本机绝对路径/);
+  const patch = await readFile(patchPath, 'utf8');
+  assert.match(patch, /# user patch/);
+  assert.match(patch, /id: user-setting[\s\S]*disabled: true/);
+  assert.match(patch, /id: dsh-context[\s\S]*disabled: true/);
+  assert.match(patch, /legacy external plugin disable overrides/);
+  assert.doesNotMatch(patch, /managed external overrides/);
+  assert.equal(patch.match(/id: dsh-context/g)?.length, 1);
 });
 
 test('unknown DSH versions warn and continue', () => {
   assert.deepEqual(compatibilityStatus('0.1.0-rc.7'), { supported: true });
+  assert.deepEqual(compatibilityStatus('0.1.2-rc.1'), { supported: true });
   assert.deepEqual(compatibilityStatus('9.0.0'), {
     supported: false,
     warning: 'DSH 9.0.0 尚未经过本仓库验证；将继续运行。',

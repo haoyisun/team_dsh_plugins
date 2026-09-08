@@ -1,9 +1,0 @@
-- id: mcp-dbx
-  name: '@deepseek-ai/dsh-mcp-client'
-  disabled: true
-  config:
-    serverName: dbx
-    transport: stdio
-    command: !!js process.env.DSH_MCP_DBX_COMMAND
-    args:
-      - !!js process.env.DSH_MCP_DBX_ENTRY

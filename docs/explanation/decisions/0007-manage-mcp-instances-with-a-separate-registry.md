@@ -2,7 +2,7 @@
 
 ## 状态
 
-Accepted
+Superseded by [ADR-008](0008-manage-mcp-instances-in-dsh-settings.md)
 
 ## 日期
 
@@ -33,3 +33,5 @@ stdio MCP 配置经常包含本机可执行文件和入口路径，HTTP MCP 可�
 ## 结果
 
 工作区插件、npm 外源插件和 MCP 实例分别使用 `profiles/web.yml`、`profiles/web.external.yml` 和 `profiles/web.mcp.yml`。三者均显式管理但生命周期不同。仓库可共享 MCP 身份和传输结构，本机路径及凭据仍由用户环境持有。
+
+该方案要求用户编辑 YAML、维护环境变量并再次运行接入流程，实际操作成本过高。ADR-008 用 DSH Settings 内的可视化管理插件替代了注册表；相关注册表、Include 和操作文档已删除。

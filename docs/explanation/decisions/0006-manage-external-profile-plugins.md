@@ -2,7 +2,7 @@
 
 ## 状态
 
-Accepted
+Superseded by ADR-009
 
 ## 日期
 
@@ -33,3 +33,6 @@ Accepted
 工作区插件和外源插件使用不同的安装机制，但都由 `profiles/*.yml` 显式声明。同步可重复执行；安装成功后才更新受管禁用覆盖。外源插件设置、持久数据、缓存和凭据仍属于 DSH Home，普通同步、禁用和解除接入均不删除这些数据。
 
 本决策扩展 ADR-005 中原有的维护命令集合，并保留 ADR-001 的官方启动命令约束。
+
+自 ADR-009 起，仓库不再维护 `profiles/web.external.yml` 和
+`pnpm run sync:external`。本文件只保留为历史决策记录。

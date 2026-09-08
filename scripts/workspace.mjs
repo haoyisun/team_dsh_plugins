@@ -10,22 +10,18 @@ import {
 } from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { parse } from 'yaml';
-
-import {
-  diagnoseExternalPlugins,
-  readExternalRegistry,
-  validateExternalRegistry,
-} from './external-plugins.mjs';
-import {
-  readMcpRegistry,
-  validateMcpRegistry,
-} from './mcp-registry.mjs';
+import { parse, stringify } from 'yaml';
 
 const START_MARKER = '# >>> team-dsh-plugins managed include >>>';
 const END_MARKER = '# <<< team-dsh-plugins managed include <<<';
+const LEGACY_EXTERNAL_START =
+  '# >>> team-dsh-plugins managed external overrides >>>';
+const LEGACY_EXTERNAL_END =
+  '# <<< team-dsh-plugins managed external overrides <<<';
+const LEGACY_EXTERNAL_COMMENT =
+  '# legacy external plugin disable overrides preserved during migration';
 const PLUGIN_SCOPE = '@team-dsh-plugins/';
-const VERIFIED_DSH_VERSIONS = new Set(['0.1.0-rc.7']);
+const VERIFIED_DSH_VERSIONS = new Set(['0.1.0-rc.7', '0.1.2-rc.1']);
 
 function profilePatchPath(dshHome) {
   return path.join(dshHome, 'profiles', 'web', 'cordis.patch.yml');
@@ -41,7 +37,6 @@ function workspaceScopeLinkPath(repoRoot) {
 
 function managedBlock(repoRoot) {
   const workspaceRegistry = pathToFileURL(path.join(repoRoot, 'profiles', 'web.yml')).href;
-  const mcpRegistry = pathToFileURL(path.join(repoRoot, 'profiles', 'web.mcp.yml')).href;
   return [
     START_MARKER,
     '- insert:',
@@ -49,10 +44,6 @@ function managedBlock(repoRoot) {
     "      name: 'cordis:include'",
     '      config:',
     `        path: ${JSON.stringify(workspaceRegistry)}`,
-    '    - id: team-dsh-plugins-mcp',
-    "      name: 'cordis:include'",
-    '      config:',
-    `        path: ${JSON.stringify(mcpRegistry)}`,
     END_MARKER,
   ].join('\n');
 }
@@ -65,6 +56,37 @@ function withoutManagedBlock(content) {
   return `${content.slice(0, start)}${content.slice(end + END_MARKER.length)}`
     .replace(/\n{3,}/g, '\n\n')
     .trimEnd();
+}
+
+export function migrateLegacyExternalOverrides(content) {
+  const start = content.indexOf(LEGACY_EXTERNAL_START);
+  if (start < 0) return content;
+  const end = content.indexOf(LEGACY_EXTERNAL_END, start);
+  if (end < 0) {
+    throw new Error('DSH profile patch contains an incomplete external managed block');
+  }
+  const body = content.slice(start + LEGACY_EXTERNAL_START.length, end).trim();
+  let disabled = [];
+  if (body) {
+    const patches = parse(body);
+    if (!Array.isArray(patches)) {
+      throw new Error('DSH external managed block must contain a patch array');
+    }
+    disabled = patches.filter((patch) =>
+      patch && typeof patch === 'object' && patch.disabled === true);
+  }
+  const base = `${content.slice(0, start)}${content.slice(end + LEGACY_EXTERNAL_END.length)}`
+    .replace(/\n{3,}/gu, '\n\n')
+    .trimEnd();
+  if (disabled.length === 0) return `${base}${base ? '\n' : ''}`;
+  const preserved = [
+    LEGACY_EXTERNAL_COMMENT,
+    stringify(disabled).trimEnd(),
+  ].join('\n');
+  if (/^\s*(?:#.*\r?\n)*\s*\[\]\s*$/u.test(base)) {
+    return `${base.replace(/\[\]\s*$/u, preserved).trimEnd()}\n`;
+  }
+  return `${base}${base ? '\n' : ''}${preserved}\n`;
 }
 
 async function exists(target) {
@@ -112,11 +134,12 @@ export async function initWorkspace({ repoRoot, dshHome }) {
   const patchPath = profilePatchPath(dshHome);
   await mkdir(path.dirname(patchPath), { recursive: true });
   const current = (await exists(patchPath)) ? await readFile(patchPath, 'utf8') : '[]\n';
-  const base = withoutManagedBlock(current);
+  const migrated = migrateLegacyExternalOverrides(current);
+  const base = withoutManagedBlock(migrated);
   const block = managedBlock(repoRoot);
   const next = /^\s*(?:#.*\r?\n)*\s*\[\]\s*$/u.test(base)
     ? base.replace(/\[\]\s*$/u, `${block}\n`)
-    : `${base.trimEnd()}\n\n${block}\n`;
+    : `${base.trimEnd()}${base.trim() ? '\n\n' : ''}${block}\n`;
   if (next !== current) {
     await backupPatch(repoRoot, patchPath);
     await writeFile(patchPath, next);
@@ -208,22 +231,6 @@ export async function validateWorkspace({ repoRoot }) {
     }
   }
 
-  try {
-    const externalEntries = await readExternalRegistry({ repoRoot });
-    const external = validateExternalRegistry(externalEntries);
-    errors.push(...external.errors);
-    warnings.push(...external.warnings);
-  } catch (error) {
-    errors.push(`无法读取 profiles/web.external.yml：${error.message}`);
-  }
-  try {
-    const mcpEntries = await readMcpRegistry({ repoRoot });
-    const mcp = validateMcpRegistry(mcpEntries);
-    errors.push(...mcp.errors);
-    warnings.push(...mcp.warnings);
-  } catch (error) {
-    errors.push(`无法读取 profiles/web.mcp.yml：${error.message}`);
-  }
   return { errors, warnings };
 }
 
@@ -253,21 +260,11 @@ export async function doctorWorkspace({ repoRoot, dshHome, dshVersion }) {
   const result = await validateWorkspace({ repoRoot });
   const errors = [...result.errors];
   const warnings = [...result.warnings];
-  if (errors.length === 0) {
-    const external = await diagnoseExternalPlugins({ repoRoot, dshHome });
-    errors.push(...external.errors);
-    warnings.push(...external.warnings);
-  }
   const patchPath = profilePatchPath(dshHome);
   try {
     const patch = await readFile(patchPath, 'utf8');
     if (!patch.includes(START_MARKER) || !patch.includes(END_MARKER)) {
       errors.push('Web Profile 尚未接入 team-dsh-plugins 注册表');
-    } else {
-      const mcpRegistry = pathToFileURL(path.join(repoRoot, 'profiles', 'web.mcp.yml')).href;
-      if (!patch.includes(mcpRegistry)) {
-        errors.push('Web Profile 尚未接入 MCP 注册表');
-      }
     }
   } catch (error) {
     errors.push(`无法读取 Web Profile patch：${error.message}`);

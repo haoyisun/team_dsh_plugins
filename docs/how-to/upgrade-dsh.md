@@ -18,7 +18,7 @@ npx @deepseek-ai/dsh web
 ## 出现插件加载故障
 
 1. 记录 `npx @deepseek-ai/dsh --version`。
-2. 在 `profiles/web.yml` 将故障插件设置为 `disabled: true`。
+2. 工作区插件在 `profiles/web.yml` 设置为 `disabled: true`；外源插件按[紧急恢复步骤](manage-plugins.md#紧急恢复)卸载。
 3. 确认 DSH 能继续启动。
 4. 按新版本 Host 服务、事件和 Client module 契约适配插件。
 5. 增加回归测试并更新插件契约或 ADR。

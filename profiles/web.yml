@@ -3,3 +3,7 @@
 - id: message-navigator
   name: '@team-dsh-plugins/message-navigator'
   disabled: true
+- id: mcp-manager
+  name: '@team-dsh-plugins/mcp-manager'
+- id: plugin-manager
+  name: '@team-dsh-plugins/plugin-manager'

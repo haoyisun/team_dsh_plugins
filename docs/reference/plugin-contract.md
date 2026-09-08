@@ -12,26 +12,17 @@
 - Storage domain：将连字符替换为下划线的 `<id>`
 - 缓存目录：`$DSH_HOME/cache/<id>/`
 
-`pnpm run validate` 强制检查工作区插件的注册包名、manifest 名和 Client module ID，并静态检查外源注册表。
+`pnpm run validate` 强制检查工作区插件的注册包名、manifest 名和 Client module ID。
 
 ## 注册
 
 工作区插件必须显式登记在目标 `profiles/<profile>.yml`。数组顺序决定加载顺序；`disabled: true` 表示停用。目录存在不代表启用。
 
-Web Profile 的 npm 外源插件登记在 `profiles/web.external.yml`：
+Web Profile 的 npm 外源插件由 `@team-dsh-plugins/plugin-manager` 管理。实际安装状态属于 DSH Home，不登记到仓库；管理器只接受 npm registry 包名、`latest` 或精确 semver，并通过当前 DSH 版本的官方 plugin 流程增删直接 Bundle 依赖。系统 Bundle、工作区插件和管理器自身只读。变更必须全局串行并在结束后核对 Profile；失败时按操作前精确版本尽力补偿，补偿结果和当前实际状态必须对用户可见。
 
-```yaml
-- package: dsh-context
-  version: '0.44.0'
-  entries:
-    - id: dsh-context
-      name: dsh-context
-  disabled: false
-```
+外源插件的设置、持久数据、缓存和凭据不会随卸载删除。Bundle 新增、删除、修复和版本变化需要重启 DSH Web；宿主重启前，管理器必须保留待生效提示并允许安全撤销可逆变更。
 
-`package` 只接受 npm registry 包名且不得使用 `@team-dsh-plugins/*`；`version` 必须是精确 semver；`entries` 必须列出 Bundle 插入的全部 Cordis entry 身份。同步会校验实际安装包、Web Profile 直接依赖、Bundle 注册和 entry 身份。修改后运行 `pnpm run sync:external`。删除声明不会卸载插件或改变其最后启停状态。
-
-MCP Client 实例登记在 `profiles/web.mcp.yml`，每项必须使用 `@deepseek-ai/dsh-mcp-client`，并声明唯一的 entry `id` 和 `serverName`。`stdio` 的 `command`、`args`、`cwd` 以及 HTTP headers 中的本机值或认证信息通过 `!!js process.env.NAME` 引用；注册表拒绝本机绝对路径和任意 JavaScript 表达式。`disabled` 省略或为 `false` 时启用，为 `true` 时禁用。
+MCP Client 实例由 `@team-dsh-plugins/mcp-manager` 管理。实例配置写入 DSH settings 的 `mcp-manager` namespace，敏感参数写入 DSH credentials；Client 不得读取或提交 credential ref，Host 按实例 ID 与字段路径绑定。所有写操作必须携带 settings revision。管理器通过 Cordis 子 Fiber 动态托管官方 `@deepseek-ai/dsh-mcp-client`，不得改写 Profile patch，也不得将实例或本机路径提交到仓库。
 
 ## Host 插件
 

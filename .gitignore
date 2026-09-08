@@ -2,10 +2,10 @@ node_modules/
 .idea/
 .env
 .env.*
-!.env.example
 *.log
 *.tmp
 *.bak
 coverage/
 .dsh/
 .backups/
+.scratch/
