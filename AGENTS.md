@@ -4,6 +4,7 @@
 
 - 新增或修改插件：读取 `docs/reference/plugin-contract.md`；新增插件同时读取 `docs/how-to/add-plugin.md`；完成前核对并维护根 `README.md` 的“插件列表”。
 - 修改接入、注册表或维护脚本：读取 `docs/explanation/architecture.md` 和相关 ADR。
+- 修改 Windows 桌面壳：读取 `docs/explanation/decisions/0010-add-optional-windows-desktop-shell.md`；保持 `desktop/` 为独立安装边界，并验证进程清理和 token 脱敏。
 - 修改 DSH Home：只调用 `scripts/cli.mjs` 提供的流程；接入块之外的用户配置与数据属于用户。
 - 改变架构或公共契约：在 `docs/explanation/decisions/` 新增 ADR，并更新受影响的 Reference。
 - 对外贡献与发布：读取 `CONTRIBUTING.md`、`SECURITY.md` 和 `CHANGELOG.md`。
@@ -17,7 +18,7 @@
 - MCP 实例由 `@team-dsh-plugins/mcp-manager` 在 DSH Settings 中管理；不得重新引入仓库 MCP 注册表或从插件改写 Profile patch。
 - 设置、持久数据、缓存和凭据遵循插件开发契约，仓库不接收本机绝对路径、密钥或运行数据。
 - 行为变更先写失败测试；完成后运行 `pnpm run validate` 和 `pnpm test`。
-- DSH 仍通过 `npx @deepseek-ai/dsh web` 启动；不要引入仓库专用启动包装器。
+- DSH 的公开默认入口仍是 `npx @deepseek-ai/dsh web`；可选 Windows 桌面壳只调用官方 CLI，不拥有 DSH 运行状态，也不进入根 pnpm workspace。
 - 公开文档保持简体中文；代码标识、命令、文件名和正式技术术语保留英文。
 
 ## Agent skills

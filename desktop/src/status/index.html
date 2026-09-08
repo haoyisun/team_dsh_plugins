@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8">
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; style-src 'self'; script-src 'self'"
+    >
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>DSH Desktop</title>
+    <link rel="stylesheet" href="./status.css">
+  </head>
+  <body>
+    <main class="status" aria-live="polite">
+      <div class="mark" aria-hidden="true">D</div>
+      <p class="eyebrow">DSH Desktop</p>
+      <h1 id="title">正在启动 DSH</h1>
+      <p id="message">首次启动可能需要从 npm 下载 DSH，请稍候。</p>
+      <div id="progress" class="progress" role="progressbar" aria-label="正在启动">
+        <span></span>
+      </div>
+      <nav id="actions" aria-label="错误处理操作" hidden>
+        <a class="primary" href="dsh-desktop://retry">重试</a>
+        <a href="dsh-desktop://copy-diagnostics">复制诊断信息</a>
+        <a href="dsh-desktop://exit">退出</a>
+      </nav>
+    </main>
+    <script src="./status.js"></script>
+  </body>
+</html>

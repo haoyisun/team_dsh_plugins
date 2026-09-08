@@ -6,6 +6,8 @@
 npx @deepseek-ai/dsh web
 ```
 
+使用可选 Windows 桌面壳时，可从托盘菜单选择“更新 DSH”。该操作同样解析 npm `latest` 并重启官方 DSH Web，不更新 Electron 壳或插件源码。
+
 npm `latest` 可能仍是预发布版本。DSH Developer Preview 明确允许破坏兼容的变更，因此升级后执行：
 
 ```powershell

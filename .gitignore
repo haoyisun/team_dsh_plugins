@@ -9,3 +9,4 @@ coverage/
 .dsh/
 .backups/
 .scratch/
+/desktop/bin/

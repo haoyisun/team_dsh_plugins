@@ -1,0 +1,169 @@
+:root {
+  color-scheme: light dark;
+  font-family:
+    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+    "Segoe UI", sans-serif;
+  background: #f7f7f6;
+  color: #1f2328;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+body {
+  min-width: 20rem;
+  min-height: 100vh;
+  margin: 0;
+  display: grid;
+  place-items: center;
+}
+
+.status {
+  width: min(32rem, calc(100vw - 3rem));
+  text-align: center;
+}
+
+.mark {
+  display: grid;
+  width: 3rem;
+  height: 3rem;
+  margin: 0 auto 1.5rem;
+  place-items: center;
+  border-radius: 0.75rem;
+  background: #202124;
+  color: #fff;
+  font-size: 1.25rem;
+  font-weight: 650;
+}
+
+.eyebrow {
+  margin: 0 0 0.5rem;
+  color: #62676f;
+  font-size: 0.75rem;
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+h1 {
+  margin: 0;
+  font-size: clamp(1.5rem, 4vw, 2rem);
+  line-height: 1.25;
+}
+
+#message {
+  min-height: 3rem;
+  margin: 0.75rem auto 0;
+  color: #62676f;
+  line-height: 1.5;
+}
+
+.progress {
+  width: 12rem;
+  height: 0.2rem;
+  margin: 1.5rem auto 0;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #d8dade;
+}
+
+.progress span {
+  display: block;
+  width: 45%;
+  height: 100%;
+  border-radius: inherit;
+  background: #202124;
+  animation: loading 1.2s ease-in-out infinite alternate;
+}
+
+nav {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.5rem;
+  margin-top: 1.5rem;
+}
+
+a {
+  min-width: 5rem;
+  padding: 0.55rem 0.85rem;
+  border: 1px solid #c8cbd0;
+  border-radius: 0.5rem;
+  color: inherit;
+  font-size: 0.875rem;
+  text-decoration: none;
+}
+
+a:hover {
+  background: #eceeed;
+}
+
+a:focus-visible {
+  outline: 2px solid #1f6feb;
+  outline-offset: 2px;
+}
+
+a.primary {
+  border-color: #202124;
+  background: #202124;
+  color: #fff;
+}
+
+@keyframes loading {
+  from {
+    transform: translateX(-10%);
+  }
+  to {
+    transform: translateX(135%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .progress span {
+    width: 100%;
+    animation: none;
+  }
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    background: #18191b;
+    color: #f0f1f2;
+  }
+
+  .mark,
+  a.primary {
+    background: #f0f1f2;
+    color: #18191b;
+  }
+
+  .eyebrow,
+  #message {
+    color: #a9adb4;
+  }
+
+  .progress {
+    background: #393c40;
+  }
+
+  .progress span {
+    background: #f0f1f2;
+  }
+
+  a {
+    border-color: #4a4e54;
+  }
+
+  a:hover {
+    background: #26282b;
+  }
+
+  a.primary {
+    border-color: #f0f1f2;
+  }
+}

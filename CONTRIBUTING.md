@@ -27,6 +27,14 @@ pnpm run doctor
 npx @deepseek-ai/dsh web
 ```
 
+修改可选 Windows 桌面壳时，另在 `desktop/` 独立安装并运行测试：
+
+```powershell
+cd desktop
+pnpm install
+pnpm test
+```
+
 ## 提交约束
 
 - 每个 PR 只做一件事：新增插件、修复、文档或基础设施。
@@ -35,6 +43,7 @@ npx @deepseek-ai/dsh web
 - 工作区插件包名必须是 `@team-dsh-plugins/<id>`，并显式登记到 `profiles/web.yml`。
 - 外源插件通过 DSH 设置中的 `plugin-manager` 管理；仓库不保存本机安装清单。管理器必须拒绝路径、URL、git spec、版本范围和工作区 scope，并在执行前绑定确认精确包名及版本。
 - MCP 实例通过 DSH 设置中的 `mcp-manager` 管理；仓库不保存实例、本机路径或认证信息。
+- Windows 桌面壳保持在根 workspace 之外；不得向 DSH 页面暴露 Node.js 或进程管理 IPC，端口占用进程未经 DSH 身份确认不得终止。
 - 架构或公共契约变化必须新增 ADR，并更新对应 Reference。
 - 不要提交密钥、`.dsh`、`.backups`、本机绝对路径或运行数据。
 - 提交信息使用 `type: 简短说明`，例如 `feat:`、`fix:`、`docs:`、`chore:`。

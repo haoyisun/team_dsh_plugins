@@ -36,3 +36,15 @@
 ## `npx @deepseek-ai/dsh web`
 
 唯一的 DSH Web 启动方式。维护脚本只负责一次性接入，不包装或替代官方启动命令。
+
+## Windows 桌面壳命令
+
+以下命令只在独立的 `desktop/` 目录执行，目前仅支持 Windows：
+
+- `pnpm install`：安装 Electron，并在本机编译 Job Object supervisor。
+- `pnpm start`：从源码启动可选桌面壳。
+- `pnpm test`：运行桌面壳契约和 supervisor 测试。
+- `pnpm run test:electron`：在真实 Electron 中验证隔离状态页和应用图标。
+- `pnpm run shortcut`：在当前用户桌面创建指向本仓库的快捷方式。
+
+桌面壳是 ADR-010 定义的可选入口；根目录命令和官方 DSH 启动契约保持不变。

@@ -1,0 +1,24 @@
+{
+  "name": "team-dsh-plugins-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Optional Windows desktop shell for DSH Web",
+  "type": "module",
+  "main": "src/main.mjs",
+  "packageManager": "pnpm@10.28.1",
+  "engines": {
+    "node": "^22.19.0 || >=24.0.0"
+  },
+  "scripts": {
+    "build:assets": "node scripts/build-icon.mjs",
+    "build:supervisor": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/build-supervisor.ps1",
+    "postinstall": "pnpm run build:supervisor && pnpm run build:assets",
+    "shortcut": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/create-shortcut.ps1",
+    "start": "electron .",
+    "test": "node --test",
+    "test:electron": "electron smoke/electron"
+  },
+  "devDependencies": {
+    "electron": "44.2.0"
+  }
+}
