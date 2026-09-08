@@ -78,7 +78,7 @@ function validateSettings(value) {
   }
 }
 
-async function probe(config) {
+async function probe(config, { signal } = {}) {
   const startedAt = Date.now();
   const client = new Client({
     name: '@team-dsh-plugins/mcp-manager-probe',
@@ -99,7 +99,7 @@ async function probe(config) {
         fetch: createBoundedFetch(globalThis.fetch),
       },
     );
-  try {
+  const run = async () => {
     await client.connect(transport, { timeout: config.toolCallTimeoutMs });
     const tools = [];
     const cursors = new Set();
@@ -136,7 +136,22 @@ async function probe(config) {
       }
     } while (cursor);
     return { latencyMs: Date.now() - startedAt, tools };
+  };
+  let abort;
+  const aborted = signal && new Promise((resolve, reject) => {
+    abort = () => {
+      const error = new Error('mcp-manager: 测试已取消');
+      error.name = 'AbortError';
+      client.close().catch(() => {});
+      reject(error);
+    };
+    if (signal.aborted) abort();
+    else signal.addEventListener('abort', abort, { once: true });
+  });
+  try {
+    return aborted ? await Promise.race([run(), aborted]) : await run();
   } finally {
+    if (signal && abort) signal.removeEventListener('abort', abort);
     await client.close().catch(() => {});
   }
 }

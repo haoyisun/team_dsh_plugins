@@ -22,7 +22,11 @@ Web Profile 的 npm 外源插件由 `@team-dsh-plugins/plugin-manager` 管理。
 
 外源插件的设置、持久数据、缓存和凭据不会随卸载删除。Bundle 新增、删除、修复和版本变化需要重启 DSH Web；宿主重启前，管理器必须保留待生效提示并允许安全撤销可逆变更。
 
-MCP Client 实例由 `@team-dsh-plugins/mcp-manager` 管理。实例配置写入 DSH settings 的 `mcp-manager` namespace，敏感参数写入 DSH credentials；Client 不得读取或提交 credential ref，Host 按实例 ID 与字段路径绑定。所有写操作必须携带 settings revision。管理器通过 Cordis 子 Fiber 动态托管官方 `@deepseek-ai/dsh-mcp-client`，不得改写 Profile patch，也不得将实例或本机路径提交到仓库。
+MCP Client 实例由 `@team-dsh-plugins/mcp-manager` 管理。实例配置写入 DSH settings 的 `mcp-manager` namespace，敏感参数写入 DSH credentials；Client 不得读取或提交 credential ref，Host 按实例 ID 与字段路径绑定。非敏感环境变量可以保存为 literal，敏感名称必须使用 credential；HTTPS Header 可以使用 credential，literal Header 仅限安全 allowlist，明文 HTTP 不得携带 credential。URL 禁止凭据、查询参数和 fragment。
+
+管理器可以预检 JSON、JSONC、YAML、Markdown 代码块、`mcpServers`、单个 Server 配置，以及 `insert` 中显式注册 `@deepseek-ai/dsh-mcp-client` 的 DSH Profile patch；Profile patch 根节点可以是单个对象或 patch 对象数组。Profile 导入只能提取 MCP Client 的 `config`，不得应用 patch 或导入其他插件条目。未知启动字段、不支持的 transport、凭据占位符及可疑路径转义必须阻止保存或要求用户明确修复，不得静默丢弃或猜测。单实例“保存并启用”必须在同一确认意图中先测试后写入；已启用实例的候选配置测试失败时不得替换当前配置或停止当前运行实例。多实例导入只能批量保存为禁用。
+
+所有写操作必须携带 settings revision。管理器通过 Cordis 子 Fiber 动态托管官方 `@deepseek-ai/dsh-mcp-client`，不得改写 Profile patch，也不得将实例或本机路径提交到仓库。
 
 ## Host 插件
 

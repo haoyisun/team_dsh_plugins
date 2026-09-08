@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 
+import { parseMcpImport } from './import-config.js';
 import {
   credentialRefFor,
   isOwnedCredentialRef,
@@ -72,8 +73,19 @@ function materializeValue(
   if (value.ref !== undefined) {
     throw new TypeError(`mcp-manager: ${path} 不得提交 credential ref`);
   }
-  const existingRef = existingRefs.get(path);
-  const ref = existingRef ?? credentialRefFor(id, path);
+  const sourcePath = value.sourcePath ?? path;
+  if (typeof sourcePath !== 'string' || sourcePath.length === 0) {
+    throw new TypeError(`mcp-manager: ${path}.sourcePath 无效`);
+  }
+  const existingRef = existingRefs.get(sourcePath);
+  if (value.sourcePath !== undefined && !existingRef) {
+    throw new TypeError(`mcp-manager: ${path}.sourcePath 不属于当前实例`);
+  }
+  if (existingRef) existingRefs.delete(sourcePath);
+  const moved = Boolean(existingRef && sourcePath !== path);
+  const ref = moved
+    ? credentialRefFor(id, `moved:${sourcePath}->${path}`)
+    : existingRef ?? credentialRefFor(id, path);
   const secret = secrets[path];
   if (clears[path] && secret !== undefined) {
     throw new TypeError(`mcp-manager: ${path} 不能同时替换和清除凭据`);
@@ -88,6 +100,8 @@ function materializeValue(
       throw new TypeError(`mcp-manager: ${path} 的凭据不能为空`);
     }
     writes.push([ref, secret]);
+  } else if (moved) {
+    writes.push([ref, { copyFrom: existingRef }]);
   } else if (!existingRef) {
     throw new TypeError(`mcp-manager: ${path} 必须提供凭据`);
   }
@@ -158,6 +172,12 @@ function assertUniqueServerName(instances, candidate) {
   }
 }
 
+function assertUniqueId(instances, candidate) {
+  if (instances.some((instance) => instance.id === candidate.id)) {
+    throw new TypeError(`mcp-manager: id ${candidate.id} 重复`);
+  }
+}
+
 function requiresApproval(instance) {
   return instance.transport === 'stdio'
     || new URL(instance.url).protocol === 'http:'
@@ -172,16 +192,26 @@ function assertExpectedRevision(value) {
   }
 }
 
+function assertCurrentRevision(document, expectedRevision) {
+  if (document.revision === expectedRevision) return;
+  const error = new Error('mcp-manager: settings revision 已变化，请刷新后重试');
+  error.code = 'SETTINGS_CONFLICT';
+  throw error;
+}
+
 function approvalBinding(action, instance, writes, removals, expectedRevision) {
   const credentialChanges = writes
     .map(([ref, value]) => [
       ref,
-      createHash('sha256').update(value).digest('hex'),
+      typeof value === 'string'
+        ? createHash('sha256').update(value).digest('hex')
+        : `copy:${value.copyFrom}`,
     ])
     .sort(([left], [right]) => left.localeCompare(right));
   return createHash('sha256')
     .update(JSON.stringify({
       action,
+      instanceId: instance.id,
       expectedRevision,
       launch: launchFingerprint(instance),
       credentialChanges,
@@ -208,6 +238,7 @@ export class McpManagerController {
   #challengeFactory;
   #now;
   #challenges = new Map();
+  #operations = new Map();
   #knownIds = new Set();
   #tail = Promise.resolve();
 
@@ -263,7 +294,37 @@ export class McpManagerController {
     return this.#public(await this.#document());
   }
 
-  async sync(input) {
+  async parseImport({ text }) {
+    const document = await this.#document();
+    const result = parseMcpImport(text, { idFactory: this.#idFactory });
+    const existingNames = new Map(
+      document.instances.map((instance) => [
+        instance.serverName.toLowerCase(),
+        instance.id,
+      ]),
+    );
+    for (const entry of result.entries) {
+      const conflictId = existingNames.get(entry.instance.serverName.toLowerCase());
+      if (!conflictId) continue;
+      entry.conflictId = conflictId;
+      result.notices.push({
+        level: 'blocking',
+        code: 'SERVER_NAME_CONFLICT',
+        path: `mcpServers.${entry.sourceName}.serverName`,
+        message: `server name ${entry.instance.serverName} 已存在，请选择更新或重命名。`,
+      });
+    }
+    return { revision: document.revision, ...result };
+  }
+
+  sync(input) {
+    const operation = () => this.#sync(input);
+    const result = this.#tail.then(operation, operation);
+    this.#tail = result.catch(() => {});
+    return result;
+  }
+
+  async #sync(input) {
     const document = input
       ? {
         instances: input.instances ?? [],
@@ -362,6 +423,73 @@ export class McpManagerController {
     }
   }
 
+  async #probeCandidate(instance, writes, operationId) {
+    if (
+      operationId !== undefined
+      && (typeof operationId !== 'string' || operationId.length === 0)
+    ) {
+      throw new TypeError('mcp-manager: operationId 必须是非空字符串');
+    }
+    if (operationId && this.#operations.has(operationId)) {
+      const error = new Error(`mcp-manager: 操作 ${operationId} 正在执行`);
+      error.code = 'OPERATION_CONFLICT';
+      throw error;
+    }
+    const abortController = new AbortController();
+    if (operationId) this.#operations.set(operationId, abortController);
+    const overrides = new Map();
+    const resolvedSecrets = new Set();
+    try {
+      for (const [ref, write] of writes) {
+        if (typeof write === 'string') {
+          overrides.set(ref, write);
+          continue;
+        }
+        const credential = await this.#credentials.resolve(write.copyFrom);
+        if (!credential?.value) {
+          throw new Error('mcp-manager: 要移动的凭据尚未配置');
+        }
+        overrides.set(ref, credential.value);
+      }
+      const config = await this.#resolve(instance, overrides, resolvedSecrets);
+      const result = await this.#probe(config, {
+        signal: abortController.signal,
+      });
+      return {
+        config,
+        secrets: resolvedSecrets,
+        result: redactSensitiveData(result, resolvedSecrets),
+      };
+    } catch (error) {
+      const wrapped = new Error(
+        abortController.signal.aborted
+          ? 'mcp-manager: 测试已取消'
+          : redactMessage(messageOf(error), resolvedSecrets),
+      );
+      wrapped.code = abortController.signal.aborted
+        ? 'TEST_CANCELLED'
+        : 'TEST_FAILED';
+      throw wrapped;
+    } finally {
+      if (
+        operationId
+        && this.#operations.get(operationId) === abortController
+      ) {
+        this.#operations.delete(operationId);
+      }
+    }
+  }
+
+  cancelTest({ operationId }) {
+    if (typeof operationId !== 'string' || operationId.length === 0) {
+      throw new TypeError('mcp-manager: operationId 必须是非空字符串');
+    }
+    const operation = this.#operations.get(operationId);
+    if (!operation) return { cancelled: false };
+    operation.abort();
+    return { cancelled: true };
+  }
+
   #assertApproved({
     action,
     instance,
@@ -448,7 +576,17 @@ export class McpManagerController {
     ]);
     const snapshot = await this.#credentialSnapshot(refs);
     try {
-      for (const [ref, value] of writes) await this.#credentials.set(ref, value);
+      for (const [ref, write] of writes) {
+        let value = write;
+        if (typeof write !== 'string') {
+          const credential = await this.#credentials.resolve(write.copyFrom);
+          if (!credential?.value) {
+            throw new Error('mcp-manager: 要移动的凭据尚未配置');
+          }
+          value = credential.value;
+        }
+        await this.#credentials.set(ref, value);
+      }
       for (const ref of removals) await this.#credentials.unset(ref);
     } catch (error) {
       try {
@@ -472,6 +610,27 @@ export class McpManagerController {
     throw originalError;
   }
 
+  async #compensateOrThrow(operations, originalError) {
+    const failures = [];
+    for (const operation of operations) {
+      try {
+        await operation();
+      } catch (error) {
+        failures.push(error);
+      }
+    }
+    if (failures.length > 0) {
+      const error = new AggregateError(
+        failures,
+        'mcp-manager: 操作失败且自动补偿未完成；请刷新并检查实例运行状态',
+      );
+      error.code = 'COMPENSATION_FAILED';
+      error.cause = originalError;
+      throw error;
+    }
+    throw originalError;
+  }
+
   async #restartIfApproved(instance, approvals) {
     if (!instance.enabled) return;
     if (
@@ -490,6 +649,7 @@ export class McpManagerController {
   }) {
     assertExpectedRevision(expectedRevision);
     const document = await this.#document();
+    assertCurrentRevision(document, expectedRevision);
     const draft = { ...input, id: this.#idFactory(), enabled: false };
     const { instance, writes, removals } = materializeInstance(
       draft,
@@ -513,40 +673,138 @@ export class McpManagerController {
     return this.list();
   }
 
+  async createMany({ entries, expectedRevision }) {
+    assertExpectedRevision(expectedRevision);
+    if (!Array.isArray(entries) || entries.length === 0) {
+      throw new TypeError('mcp-manager: entries 必须是非空数组');
+    }
+    const document = await this.#document();
+    assertCurrentRevision(document, expectedRevision);
+    const instances = [...document.instances];
+    const writes = [];
+    for (const entry of entries) {
+      if (!entry || typeof entry !== 'object') {
+        throw new TypeError('mcp-manager: entry 必须是对象');
+      }
+      const draft = {
+        ...entry.instance,
+        id: this.#idFactory(),
+        enabled: false,
+      };
+      const materialized = materializeInstance(
+        draft,
+        undefined,
+        entry.secrets ?? {},
+        entry.clears ?? {},
+      );
+      if (materialized.removals.size > 0) {
+        throw new TypeError('mcp-manager: 新实例没有可清除的凭据');
+      }
+      assertUniqueId(instances, materialized.instance);
+      assertUniqueServerName(instances, materialized.instance);
+      instances.push(materialized.instance);
+      writes.push(...materialized.writes);
+    }
+    const rollback = await this.#mutateCredentials(writes);
+    try {
+      await this.#settings.write({
+        instances,
+        approvals: document.approvals,
+      }, expectedRevision);
+    } catch (error) {
+      await this.#rollbackOrThrow(rollback, error);
+    }
+    return this.list();
+  }
+
+  async createAndEnable({
+    instance: input,
+    secrets = {},
+    clears = {},
+    expectedRevision,
+    confirmationToken,
+    operationId,
+  }) {
+    assertExpectedRevision(expectedRevision);
+    const document = await this.#document();
+    assertCurrentRevision(document, expectedRevision);
+    const draft = { ...input, enabled: true };
+    const { instance, writes, removals } = materializeInstance(
+      draft,
+      undefined,
+      secrets,
+      clears,
+    );
+    if (removals.size > 0) {
+      throw new TypeError('mcp-manager: 新实例没有可清除的凭据');
+    }
+    assertUniqueId(document.instances, instance);
+    assertUniqueServerName(document.instances, instance);
+    const approvedFingerprint = this.#assertApproved({
+      action: 'create-and-enable',
+      instance,
+      writes,
+      expectedRevision,
+      confirmationToken,
+      force: writes.length > 0,
+    });
+    const tested = await this.#probeCandidate(instance, writes, operationId);
+    const approvals = { ...document.approvals };
+    if (approvedFingerprint) approvals[instance.id] = approvedFingerprint;
+    const rollback = await this.#mutateCredentials(writes);
+    try {
+      await this.#runtime.upsert(instance, tested.config, tested.secrets);
+      await this.#settings.write({
+        instances: [...document.instances, instance],
+        approvals,
+      }, expectedRevision);
+    } catch (error) {
+      await this.#compensateOrThrow([
+        () => this.#runtime.remove(instance.id),
+        rollback,
+      ], error);
+    }
+    return {
+      state: await this.list(),
+      testResult: tested.result,
+    };
+  }
+
   async update({
     instance: input,
     secrets = {},
     clears = {},
     expectedRevision,
     confirmationToken,
+    operationId,
   }) {
     assertExpectedRevision(expectedRevision);
     const document = await this.#document();
+    assertCurrentRevision(document, expectedRevision);
     const existing = document.instances.find((instance) => instance.id === input.id);
     if (!existing) {
       const error = new Error(`mcp-manager: 找不到实例 ${input.id}`);
       error.code = 'NOT_FOUND';
       throw error;
     }
+    if (existing.enabled) {
+      const result = await this.#updateAndApply({
+        instance: input,
+        secrets,
+        clears,
+        expectedRevision,
+        confirmationToken,
+        operationId,
+      }, 'update');
+      return result.state;
+    }
     const { instance, writes, removals } = materializeInstance(
-      input,
+      { ...input, enabled: false },
       existing,
       secrets,
       clears,
     );
     assertUniqueServerName(document.instances, instance);
-    const approvedFingerprint = instance.enabled
-      ? this.#assertApproved({
-        action: 'update',
-        instance,
-        writes,
-        removals,
-        expectedRevision,
-        confirmationToken,
-        storedFingerprint: document.approvals[instance.id],
-        force: writes.length > 0 || removals.size > 0,
-      })
-      : undefined;
     const nextInstances = document.instances.map((item) =>
       item.id === instance.id ? instance : item);
     const approvals = { ...document.approvals };
@@ -558,7 +816,6 @@ export class McpManagerController {
     ) {
       delete approvals[instance.id];
     }
-    if (approvedFingerprint) approvals[instance.id] = approvedFingerprint;
     const oldRefs = ownedCredentialRefs(existing);
     const nextRefs = ownedCredentialRefs(instance);
     const removedRefs = new Set([...oldRefs].filter((ref) => !nextRefs.has(ref)));
@@ -569,17 +826,88 @@ export class McpManagerController {
     } catch (error) {
       await this.#rollbackOrThrow(rollback, error);
     }
-    if (instance.enabled) {
-      try {
-        const resolved = await this.#resolved(instance);
-        await this.#runtime.upsert(instance, resolved.config, resolved.secrets);
-      } catch {
-        // 配置已成功持久化；运行错误由 runtime 状态返回。
-      }
-    } else {
-      await this.#runtime.remove(instance.id);
-    }
+    await this.#runtime.remove(instance.id);
     return this.list();
+  }
+
+  async updateAndApply(payload) {
+    return this.#updateAndApply(payload, 'update-and-apply');
+  }
+
+  async #updateAndApply({
+    instance: input,
+    secrets = {},
+    clears = {},
+    expectedRevision,
+    confirmationToken,
+    operationId,
+  }, approvalAction) {
+    assertExpectedRevision(expectedRevision);
+    const document = await this.#document();
+    assertCurrentRevision(document, expectedRevision);
+    const existing = document.instances.find((instance) => instance.id === input.id);
+    if (!existing) {
+      const error = new Error(`mcp-manager: 找不到实例 ${input.id}`);
+      error.code = 'NOT_FOUND';
+      throw error;
+    }
+    if (!existing.enabled) {
+      throw new TypeError('mcp-manager: 禁用实例请使用普通保存');
+    }
+    const { instance, writes, removals } = materializeInstance(
+      { ...input, enabled: true },
+      existing,
+      secrets,
+      clears,
+    );
+    if (removals.size > 0) {
+      throw new TypeError('mcp-manager: 清除凭据后不能测试并应用');
+    }
+    assertUniqueServerName(document.instances, instance);
+    const approvedFingerprint = this.#assertApproved({
+      action: approvalAction,
+      instance,
+      writes,
+      expectedRevision,
+      confirmationToken,
+      storedFingerprint: document.approvals[instance.id],
+      force: writes.length > 0,
+    });
+    const previousSecrets = new Set();
+    const previousConfig = await this.#resolve(
+      existing,
+      new Map(),
+      previousSecrets,
+    );
+    const tested = await this.#probeCandidate(instance, writes, operationId);
+    const nextInstances = document.instances.map((item) =>
+      item.id === instance.id ? instance : item);
+    const approvals = { ...document.approvals };
+    if (approvedFingerprint) approvals[instance.id] = approvedFingerprint;
+    const oldRefs = ownedCredentialRefs(existing);
+    const nextRefs = ownedCredentialRefs(instance);
+    const removedRefs = new Set([...oldRefs].filter((ref) => !nextRefs.has(ref)));
+    const rollback = await this.#mutateCredentials(writes, removedRefs);
+    try {
+      await this.#runtime.upsert(instance, tested.config, tested.secrets);
+      await this.#settings.write({
+        instances: nextInstances,
+        approvals,
+      }, expectedRevision);
+    } catch (error) {
+      await this.#compensateOrThrow([
+        () => this.#runtime.upsert(
+          existing,
+          previousConfig,
+          previousSecrets,
+        ),
+        rollback,
+      ], error);
+    }
+    return {
+      state: await this.list(),
+      testResult: tested.result,
+    };
   }
 
   async setEnabled({
@@ -587,15 +915,18 @@ export class McpManagerController {
     enabled,
     expectedRevision,
     confirmationToken,
+    operationId,
   }) {
     assertExpectedRevision(expectedRevision);
     const document = await this.#document();
+    assertCurrentRevision(document, expectedRevision);
     const existing = document.instances.find((instance) => instance.id === id);
     if (!existing) {
       const error = new Error(`mcp-manager: 找不到实例 ${id}`);
       error.code = 'NOT_FOUND';
       throw error;
     }
+    if (existing.enabled === enabled) return this.#public(document);
     const instance = { ...existing, enabled };
     const approvedFingerprint = enabled
       ? this.#assertApproved({
@@ -608,19 +939,45 @@ export class McpManagerController {
       : undefined;
     const approvals = { ...document.approvals };
     if (approvedFingerprint) approvals[id] = approvedFingerprint;
-    await this.#settings.write({
-      instances: document.instances.map((item) => item.id === id ? instance : item),
-      approvals,
-    }, expectedRevision);
     if (enabled) {
+      const tested = await this.#probeCandidate(instance, [], operationId);
       try {
-        const resolved = await this.#resolved(instance);
-        await this.#runtime.upsert(instance, resolved.config, resolved.secrets);
-      } catch {
-        // 配置保留，错误通过 status 暴露。
+        await this.#runtime.upsert(instance, tested.config, tested.secrets);
+        await this.#settings.write({
+          instances: document.instances.map((item) => item.id === id ? instance : item),
+          approvals,
+        }, expectedRevision);
+      } catch (error) {
+        await this.#compensateOrThrow([
+          () => this.#runtime.remove(id),
+        ], error);
       }
     } else {
+      const previousSecrets = new Set();
+      let previousConfig;
+      try {
+        previousConfig = await this.#resolve(
+          existing,
+          new Map(),
+          previousSecrets,
+        );
+      } catch {
+        // 缺失凭据的失败实例仍必须可以禁用。
+      }
       await this.#runtime.remove(id);
+      try {
+        await this.#settings.write({
+          instances: document.instances.map((item) => item.id === id ? instance : item),
+          approvals,
+        }, expectedRevision);
+      } catch (error) {
+        if (previousConfig) {
+          await this.#compensateOrThrow([
+            () => this.#runtime.upsert(existing, previousConfig, previousSecrets),
+          ], error);
+        }
+        throw error;
+      }
     }
     return this.list();
   }
@@ -628,6 +985,7 @@ export class McpManagerController {
   async remove({ id, expectedRevision }) {
     assertExpectedRevision(expectedRevision);
     const document = await this.#document();
+    assertCurrentRevision(document, expectedRevision);
     const existing = document.instances.find((instance) => instance.id === id);
     if (!existing) return this.#public(document);
     await this.#runtime.remove(id);
@@ -636,8 +994,9 @@ export class McpManagerController {
     try {
       rollback = await this.#mutateCredentials([], refs);
     } catch (error) {
-      await this.#restartIfApproved(existing, document.approvals).catch(() => {});
-      throw error;
+      await this.#compensateOrThrow([
+        () => this.#restartIfApproved(existing, document.approvals),
+      ], error);
     }
     const approvals = { ...document.approvals };
     delete approvals[id];
@@ -647,12 +1006,10 @@ export class McpManagerController {
         approvals,
       }, expectedRevision);
     } catch (error) {
-      try {
-        await rollback();
-      } finally {
-        await this.#restartIfApproved(existing, document.approvals).catch(() => {});
-      }
-      throw error;
+      await this.#compensateOrThrow([
+        rollback,
+        () => this.#restartIfApproved(existing, document.approvals),
+      ], error);
     }
     return this.list();
   }
@@ -660,6 +1017,7 @@ export class McpManagerController {
   async reload({ id, expectedRevision, confirmationToken }) {
     assertExpectedRevision(expectedRevision);
     const document = await this.#document();
+    assertCurrentRevision(document, expectedRevision);
     const instance = document.instances.find((item) => item.id === id);
     if (!instance) throw new Error(`mcp-manager: 找不到实例 ${id}`);
     if (!instance.enabled) throw new Error('mcp-manager: 禁用实例不能重载');
@@ -694,8 +1052,14 @@ export class McpManagerController {
     secrets = {},
     clears = {},
     confirmationToken,
+    operationId,
+    expectedRevision,
   }) {
     const document = await this.#document();
+    if (expectedRevision !== undefined) {
+      assertExpectedRevision(expectedRevision);
+      assertCurrentRevision(document, expectedRevision);
+    }
     const existing = document.instances.find((instance) => instance.id === input.id);
     const { instance, writes, removals } = materializeInstance(
       input,
@@ -711,34 +1075,27 @@ export class McpManagerController {
       action: 'test',
       instance,
       writes,
-      expectedRevision: document.revision,
+      expectedRevision: expectedRevision ?? document.revision,
       confirmationToken,
       storedFingerprint: document.approvals[instance.id],
       force: writes.length > 0,
     });
-    const overrides = new Map(writes);
-    const resolvedSecrets = new Set();
-    try {
-      const result = await this.#probe(
-        await this.#resolve(instance, overrides, resolvedSecrets),
-      );
-      return redactSensitiveData(result, resolvedSecrets);
-    } catch (error) {
-      const message = redactMessage(messageOf(error), resolvedSecrets);
-      const wrapped = new Error(message);
-      wrapped.code = 'TEST_FAILED';
-      throw wrapped;
-    }
+    return (await this.#probeCandidate(instance, writes, operationId)).result;
   }
 
   async #dispatch(endpoint, payload) {
     if (endpoint === 'list') return this.list();
+    if (endpoint === 'parse-import') return this.parseImport(payload);
     if (endpoint === 'create') return this.create(payload);
+    if (endpoint === 'create-many') return this.createMany(payload);
+    if (endpoint === 'create-and-enable') return this.createAndEnable(payload);
     if (endpoint === 'update') return this.update(payload);
+    if (endpoint === 'update-and-apply') return this.updateAndApply(payload);
     if (endpoint === 'set-enabled') return this.setEnabled(payload);
     if (endpoint === 'delete') return this.remove(payload);
     if (endpoint === 'reload') return this.reload(payload);
     if (endpoint === 'test') return this.test(payload);
+    if (endpoint === 'cancel-test') return this.cancelTest(payload);
     if (endpoint === 'tools') return this.tools(payload);
     const error = new Error(`mcp-manager: 未知操作 ${endpoint}`);
     error.code = 'NOT_FOUND';
@@ -749,7 +1106,13 @@ export class McpManagerController {
     try {
       const operation = () => this.#dispatch(endpoint, payload);
       let value;
-      if (endpoint === 'list' || endpoint === 'tools') {
+      if (
+        endpoint === 'list'
+        || endpoint === 'tools'
+        || endpoint === 'parse-import'
+        || endpoint === 'test'
+        || endpoint === 'cancel-test'
+      ) {
         value = await operation();
       } else {
         const result = this.#tail.then(operation, operation);

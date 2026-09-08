@@ -24,7 +24,7 @@ pnpm run doctor
 
 ## 管理 MCP Server
 
-启动 DSH 后打开设置侧边栏中的“MCP 管理”。该页面管理全局 stdio 和 Streamable HTTP 连接，支持测试、启停、重载和删除。
+启动 DSH 后打开设置侧边栏中的“MCP 管理”。可以直接粘贴第三方 JSON/JSONC/YAML 配置，也可以粘贴 `insert` 中注册 `@deepseek-ai/dsh-mcp-client` 的 DSH Profile patch；核对解析提示和凭据分类后测试并启用。也可以切换到手动表单。该页面管理全局 stdio 和 Streamable HTTP 连接，支持测试、启停、重新启动、工具查看和删除。
 
 实例配置及凭据属于 DSH Home，不写入本仓库。插件只管理连接，不安装或升级 MCP Server。
 

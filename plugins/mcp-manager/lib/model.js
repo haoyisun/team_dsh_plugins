@@ -5,7 +5,7 @@ const UUID =
 const SERVER_NAME = /^[A-Za-z0-9_-]{1,32}$/u;
 const CREDENTIAL_REF = /^[A-Za-z_][A-Za-z0-9_]*$/u;
 const ENV_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/u;
-const HEADER_NAME = /^[A-Za-z][A-Za-z0-9_-]*$/u;
+const HEADER_NAME = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/u;
 const SENSITIVE_NAME =
   /(?:api[-_]?key|access[-_]?key|private|credential|token|secret|password|authorization|auth)/iu;
 const SAFE_LITERAL_HEADERS = new Set([
@@ -43,6 +43,13 @@ function expectObject(value, label) {
 function expectString(value, label, { empty = false } = {}) {
   if (typeof value !== 'string' || (!empty && value.trim().length === 0)) {
     fail(`${label} 不能为空`);
+  }
+  return value;
+}
+
+function rejectControlCharacters(value, label) {
+  if (/[\u0000-\u001f]/u.test(value)) {
+    fail(`${label} 不得包含控制字符，请检查反斜杠转义`);
   }
   return value;
 }
@@ -109,6 +116,7 @@ function validateArgs(values, ownerId) {
     validateValue(value, `args[${index}]`, ownerId));
   for (const [index, value] of args.entries()) {
     if (value.kind !== 'literal') continue;
+    rejectControlCharacters(value.value, `args[${index}]`);
     const assignment = value.value.match(/^(?:--?)?([^=]+)=(.*)$/u);
     if (assignment && SENSITIVE_NAME.test(assignment[1])) {
       fail(`args[${index}] 的敏感参数必须使用凭据`);
@@ -207,18 +215,25 @@ export function validateInstance(input) {
       'stdio instance',
     );
     if (!Array.isArray(input.args)) fail('args 必须是数组');
+    const command = rejectControlCharacters(
+      expectString(input.command, 'command'),
+      'command',
+    );
+    const cwd = rejectControlCharacters(
+      expectString(input.cwd, 'cwd', { empty: true }),
+      'cwd',
+    );
     return {
       ...common,
       transport: 'stdio',
-      command: expectString(input.command, 'command'),
+      command,
       args: validateArgs(input.args, common.id),
-      cwd: expectString(input.cwd, 'cwd', { empty: true }),
+      cwd,
       env: validateNamedValues(
         input.env,
         'env',
         ENV_NAME,
         common.id,
-        () => false,
       ),
     };
   }
@@ -257,14 +272,6 @@ export function validateInstance(input) {
       common.id,
       (header) => SAFE_LITERAL_HEADERS.has(header.toLowerCase()),
     );
-    for (const row of headers) {
-      if (
-        row.value.kind === 'credential'
-        && row.name.toLowerCase() !== 'authorization'
-      ) {
-        fail(`headers.${row.name} 的凭据仅支持 Authorization header`);
-      }
-    }
     if (
       url.protocol === 'http:'
       && headers.some((row) => row.value.kind === 'credential')
@@ -482,7 +489,10 @@ export class ManagedMcpRuntime {
 
   async #remove(id) {
     const current = this.#children.get(id);
-    if (!current) return;
+    if (!current) {
+      this.#states.delete(id);
+      return;
+    }
     try {
       await current.child.dispose();
       this.#children.delete(id);

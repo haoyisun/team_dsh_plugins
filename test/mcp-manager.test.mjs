@@ -131,6 +131,16 @@ test('instance validation rejects incomplete, duplicate, and unsafe fields', () 
     /连续下划线/,
   );
   assert.throws(
+    () => validateInstance(stdio({ command: 'C:\tools' })),
+    /控制字符/,
+  );
+  assert.throws(
+    () => validateInstance(stdio({
+      args: [{ kind: 'literal', value: 'C:\tools' }],
+    })),
+    /控制字符/,
+  );
+  assert.throws(
     () => validateInstance({
       id: ID,
       displayName: 'Bad remote',
@@ -163,15 +173,6 @@ test('instance validation rejects incomplete, duplicate, and unsafe fields', () 
       args: [{ kind: 'literal', value: 'PRIVATE_VALUE=committed-secret' }],
     })),
     /敏感参数必须使用凭据/,
-  );
-  assert.throws(
-    () => validateInstance(stdio({
-      env: [{
-        name: 'LOG_LEVEL',
-        value: { kind: 'literal', value: 'committed-secret' },
-      }],
-    })),
-    /env\.LOG_LEVEL.*凭据/,
   );
   assert.throws(
     () => validateInstance({
@@ -211,31 +212,47 @@ test('instance validation rejects incomplete, duplicate, and unsafe fields', () 
     }),
     /查询参数/,
   );
-  assert.throws(
-    () => validateInstance({
-      id: ID,
-      displayName: 'Redirectable secret',
-      serverName: 'redirectable',
-      enabled: false,
-      transport: 'streamable-http',
-      url: 'https://example.com/mcp',
-      headers: [{
-        name: 'X-API-Key',
-        value: {
-          kind: 'credential',
-          ref: credentialRefFor(ID, 'headers.X-API-Key'),
-        },
-      }],
-      toolCallTimeoutMs: 30_000,
-      reconnect: {
-        enabled: true,
-        initialDelayMs: 1_000,
-        maxDelayMs: 30_000,
-        maxAttempts: 10,
+});
+
+test('instance validation permits non-sensitive env literals and HTTPS secret headers', () => {
+  const local = validateInstance(stdio({
+    env: [{
+      name: 'LOG_LEVEL',
+      value: { kind: 'literal', value: 'info' },
+    }],
+  }));
+  assert.deepEqual(local.env[0].value, { kind: 'literal', value: 'info' });
+
+  const remote = validateInstance({
+    id: ID,
+    displayName: 'Remote API key',
+    serverName: 'remote-api-key',
+    enabled: false,
+    transport: 'streamable-http',
+    url: 'https://example.com/mcp',
+    headers: [{
+      name: 'X-API-Key',
+      value: {
+        kind: 'credential',
+        ref: credentialRefFor(ID, 'headers.X-API-Key'),
       },
-    }),
-    /仅支持 Authorization/,
-  );
+    }, {
+      name: 'X.Trace+Key',
+      value: {
+        kind: 'credential',
+        ref: credentialRefFor(ID, 'headers.X.Trace+Key'),
+      },
+    }],
+    toolCallTimeoutMs: 30_000,
+    reconnect: {
+      enabled: true,
+      initialDelayMs: 1_000,
+      maxDelayMs: 30_000,
+      maxAttempts: 10,
+    },
+  });
+  assert.equal(remote.headers[0].name, 'X-API-Key');
+  assert.equal(remote.headers[1].name, 'X.Trace+Key');
 });
 
 test('launch approval fingerprint changes only when launch behavior changes', () => {
@@ -337,6 +354,12 @@ test('managed runtime keeps startup failures observable without a child instance
     phase: 'failed',
     toolCount: 0,
     lastError: 'offline',
+  });
+  await runtime.remove(ID);
+  assert.deepEqual(runtime.status(ID), {
+    phase: 'disabled',
+    toolCount: 0,
+    lastError: undefined,
   });
 });
 
@@ -1048,7 +1071,7 @@ test('client contributes a localized MCP settings section over authenticated RPC
     /id:\s*["']@team-dsh-plugins\/mcp-manager["']/,
   );
   assert.match(client, /settings\.section/);
-  assert.match(client, /ctx\.connection\.rpc\.call\(["']\/mcp-manager["']/);
+  assert.match(client, /ctx\.connection\.rpc\.call\(\s*["']\/mcp-manager["']/);
   assert.match(client, /ctx\.locale\.register/);
   assert.match(client, /aria-label|aria-labelledby/);
   assert.match(client, /确认|confirm/i);
@@ -1056,6 +1079,26 @@ test('client contributes a localized MCP settings section over authenticated RPC
   assert.match(client, /confirmationToken/);
   assert.match(client, /loadGeneration/);
   assert.match(client, /clearCredential/);
+  assert.match(
+    client,
+    /require\(["']@deepseek-ai\/dsh-client-ui-primitives["']\)/,
+  );
+  for (const primitive of ['Button', 'Modal', 'Toast', 'StateDot', 'Menu', 'Tooltip']) {
+    assert.match(client, new RegExp(`\\b${primitive}\\b`));
+  }
+  for (const endpoint of [
+    'parse-import',
+    'create-many',
+    'create-and-enable',
+    'update-and-apply',
+    'cancel-test',
+  ]) {
+    assert.match(client, new RegExp(endpoint));
+  }
+  assert.doesNotMatch(client, /phrase:\s*instance\.serverName/u);
+  assert.doesNotMatch(client, /checked:\s*instance\.enabled/u);
+  assert.match(client, /高级设置|Advanced settings/u);
+  assert.match(client, /保存并启用|Save and enable/u);
 
   const host = await readFile(
     path.join(repoRoot, 'plugins', 'mcp-manager', 'lib', 'index.js'),
@@ -1064,4 +1107,19 @@ test('client contributes a localized MCP settings section over authenticated RPC
   assert.match(host, /MAX_PROBE_PAGES/);
   assert.match(host, /MAX_PROBE_TOOLS/);
   assert.match(host, /重复 cursor/);
+});
+
+test('MCP editor widens the Modal shell without overflowing its body', async () => {
+  const client = await readFile(
+    path.join(repoRoot, 'plugins', 'mcp-manager', 'lib', 'client.js'),
+    'utf8',
+  );
+
+  assert.match(client, /className:\s*["']mm-editorDialog["']/);
+  assert.match(client, /\.mm-editorDialog\{[^}]*width:min\(720px,100%\)/);
+  assert.match(client, /\.mm-modalBody\{width:100%/);
+  assert.doesNotMatch(
+    client,
+    /\.mm-modalBody\{[^}]*width:min\(680px,calc\(100vw - 48px\)\)/,
+  );
 });

@@ -26,7 +26,8 @@
   },
   "dependencies": {
     "@deepseek-ai/schemastery": "^3.18.2",
-    "@modelcontextprotocol/sdk": "^1.12.0"
+    "@modelcontextprotocol/sdk": "^1.12.0",
+    "yaml": "^2.9.0"
   },
   "license": "MIT"
 }
