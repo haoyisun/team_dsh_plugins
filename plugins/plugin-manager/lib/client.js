@@ -41,6 +41,21 @@ window.__ModuleLoader__.load({
 			resolving: "正在解析",
 			loading: "正在读取插件…",
 			empty: "尚未安装外源插件。",
+			registryHeading: "npm 镜像源",
+			registryHint: "只影响本页的查询和安装，不会改本机或 Profile 的 .npmrc。",
+			registryPlaceholder: "例如 https://registry.npmmirror.com 或 http://mirrors.cloud.tencent.com/npm/",
+			registryOfficial: "官方 npm",
+			registryNpmmirror: "npmmirror",
+			registrySave: "保存",
+			registryReset: "恢复默认",
+			registrySaving: "正在保存",
+			registrySaved: "已保存镜像源。",
+			registryCurrentCustom: "当前生效：{host}（自定义）",
+			registryCurrentDefault: "当前生效：本机默认",
+			invalidRegistry: "请输入合法的 http 或 https registry URL。",
+			adviceInvalidRegistry: "使用 http 或 https 地址，不要包含用户名、密码、查询参数或 fragment。路径型镜像请保留末尾 /。",
+			configuredRegistry: "配置的 Registry",
+			packageRegistry: "包实际来源",
 			external: "外源插件",
 			system: "系统管理",
 			systemTip: "这些 Bundle 由 DSH 或当前工作区提供，只在此展示状态，不能从本页面修改。",
@@ -153,6 +168,21 @@ window.__ModuleLoader__.load({
 			resolving: "Resolving",
 			loading: "Loading plugins…",
 			empty: "No external plugins are installed.",
+			registryHeading: "npm registry",
+			registryHint: "Applies only to lookups and installs on this page. It does not change the machine or Profile .npmrc.",
+			registryPlaceholder: "For example, https://registry.npmmirror.com or http://mirrors.cloud.tencent.com/npm/",
+			registryOfficial: "Official npm",
+			registryNpmmirror: "npmmirror",
+			registrySave: "Save",
+			registryReset: "Restore default",
+			registrySaving: "Saving",
+			registrySaved: "Registry saved.",
+			registryCurrentCustom: "In use: {host} (custom)",
+			registryCurrentDefault: "In use: machine default",
+			invalidRegistry: "Enter a valid http or https registry URL.",
+			adviceInvalidRegistry: "Use an http or https URL without a username, password, query string, or fragment. Keep the trailing slash on path-based mirrors.",
+			configuredRegistry: "Configured registry",
+			packageRegistry: "Package origin",
 			external: "External plugins",
 			system: "System managed",
 			systemTip: "These Bundles are supplied by DSH or this workspace. Their state is visible here, but they are read-only.",
@@ -251,7 +281,7 @@ window.__ModuleLoader__.load({
 		const css = [
 			".pm-root{width:100%;max-width:860px;color:var(--dsw-alias-label-primary);display:flex;flex-direction:column;gap:20px}",
 			".pm-header{display:flex;align-items:flex-start;justify-content:space-between;gap:16px}.pm-heading{min-width:0}.pm-heading h2{margin:0;font-size:18px;line-height:26px}.pm-heading p,.pm-muted{margin:4px 0 0;color:var(--dsw-alias-label-tertiary);font-size:13px;line-height:20px}.pm-refresh{display:flex;align-items:center;gap:8px;color:var(--dsw-alias-label-tertiary);font-size:11px;white-space:nowrap}.pm-tooltipAnchor{display:inline-flex}.pm-refreshButton{width:28px;padding:0;background:transparent}",
-			".pm-addCard{background:var(--dsw-alias-bg-layer-3);box-shadow:var(--dsw-elevation-stroke);border-radius:12px;padding:16px;display:flex;flex-direction:column;gap:12px}.pm-addTitle{font-size:14px;line-height:20px;font-weight:600}.pm-addRow{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:end}.pm-field{display:flex;flex-direction:column;gap:6px}.pm-label{font-size:12px;color:var(--dsw-alias-label-secondary)}",
+			".pm-addCard{background:var(--dsw-alias-bg-layer-3);box-shadow:var(--dsw-elevation-stroke);border-radius:12px;padding:16px;display:flex;flex-direction:column;gap:12px}.pm-addTitle{font-size:14px;line-height:20px;font-weight:600}.pm-addRow{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:end}.pm-chipRow{display:flex;flex-wrap:wrap;gap:8px}.pm-field{display:flex;flex-direction:column;gap:6px}.pm-label{font-size:12px;color:var(--dsw-alias-label-secondary)}",
 			".pm-input{box-sizing:border-box;width:100%;height:36px;border:.5px solid var(--dsw-alias-border-l3);border-radius:8px;background:var(--dsw-alias-bg-layer-2);color:var(--dsw-alias-label-primary);font:inherit;padding:0 10px}.pm-input::placeholder{color:var(--dsw-alias-label-tertiary)}.pm-input:focus-visible,.pm-details summary:focus-visible,.pm-system summary:focus-visible,.pm-info:focus-visible{outline:2px solid var(--dsw-alias-state-business-primary);outline-offset:2px}.pm-input:disabled{opacity:.5}.pm-versionBox{display:flex;gap:8px;align-items:end;margin-top:8px}.pm-versionBox .pm-field{flex:1}.pm-details summary,.pm-system summary{width:max-content;cursor:pointer;color:var(--dsw-alias-label-secondary);font-size:12px}.pm-details summary:hover,.pm-system summary:hover{color:var(--dsw-alias-label-primary)}",
 			".pm-section{display:flex;flex-direction:column;gap:10px}.pm-sectionHead{display:flex;align-items:center;justify-content:space-between;gap:12px}.pm-sectionHead h3{margin:0;font-size:14px;line-height:20px}.pm-count{color:var(--dsw-alias-label-tertiary);font-size:11px}.pm-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}.pm-card{background:var(--dsw-alias-bg-layer-3);box-shadow:var(--dsw-elevation-stroke);border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:10px}.pm-cardTop{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:start}.pm-cardIdentity{display:flex;gap:10px;min-width:0}.pm-cardIdentity>span{margin-top:5px}.pm-cardTitle{min-width:0}.pm-cardTitle strong{display:block;font-size:14px;line-height:20px;overflow-wrap:anywhere}.pm-meta{color:var(--dsw-alias-label-tertiary);font-family:var(--ds-font-family-code);font-size:11px;line-height:18px;overflow-wrap:anywhere}.pm-status{font-size:12px;line-height:18px;color:var(--dsw-alias-label-secondary)}.pm-cardActions{display:flex;align-items:center;gap:6px}.pm-inlineError{color:var(--dsw-alias-state-error-primary);font-size:12px;line-height:18px}.pm-empty{padding:28px 16px;text-align:center;border:.5px dashed var(--dsw-alias-border-l3);border-radius:12px;color:var(--dsw-alias-label-tertiary);font-size:13px}",
 			".pm-update{color:var(--dsw-alias-state-success-primary);font-size:12px}.pm-versionEditor{border-top:.5px solid var(--dsw-alias-border-l3);padding-top:10px;display:grid;grid-template-columns:minmax(0,220px) auto;gap:8px;align-items:end}",
@@ -315,6 +345,9 @@ window.__ModuleLoader__.load({
 				"restart-pending": ["errorRestartPending", "adviceRestartPending"],
 			};
 			if (error?.code === "OPERATION_BUSY") return { reason: t("busy"), advice: "" };
+			if (error?.code === "INVALID_REGISTRY") {
+				return { reason: t("invalidRegistry"), advice: t("adviceInvalidRegistry") };
+			}
 			if (error?.code === "INVALID_INPUT") return { reason: t("invalid"), advice: "" };
 			if (error?.code === "APPROVAL_REQUIRED") return { reason: t("approval"), advice: "" };
 			if (error?.code === "NO_VERSION_CHANGE") return { reason: t("noChange"), advice: "" };
@@ -343,6 +376,11 @@ window.__ModuleLoader__.load({
 			if (!state) return null;
 			const operation = state.operation;
 			const metadata = operation.metadata;
+			const configuredHost = operation.registry?.source === "custom"
+				? operation.registry.host
+				: "";
+			const packageHost = metadata?.registryHost;
+			const registryHost = configuredHost || packageHost;
 			const titleKey = operation.action === "add"
 				? "addTitle"
 				: operation.action === "remove"
@@ -377,8 +415,11 @@ window.__ModuleLoader__.load({
 						h("dt", null, t("currentVersion")), h("dd", null, operation.currentVersion)),
 					operation.targetVersion && h(React.Fragment, null,
 						h("dt", null, t("targetVersion")), h("dd", null, operation.targetVersion)),
-					metadata?.registryHost && h(React.Fragment, null,
-						h("dt", null, t("registry")), h("dd", null, metadata.registryHost)),
+					registryHost && h(React.Fragment, null,
+						h("dt", null, t(configuredHost ? "configuredRegistry" : "registry")),
+						h("dd", null, registryHost)),
+					configuredHost && packageHost && configuredHost !== packageHost && h(React.Fragment, null,
+						h("dt", null, t("packageRegistry")), h("dd", null, packageHost)),
 					metadata && h(React.Fragment, null,
 						h("dt", null, t("lifecycle")),
 						h("dd", null, metadata.lifecycleScripts.length
@@ -673,6 +714,86 @@ window.__ModuleLoader__.load({
 						`${plugin.version || "—"} · ${t("readOnly")}`)))));
 		}
 
+		const NPMMIRROR = "https://registry.npmmirror.com";
+
+		function RegistryCard({
+			draft,
+			saved,
+			host,
+			source,
+			busy,
+			saving,
+			error,
+			t,
+			onDraftChange,
+			onPreset,
+			onSave,
+			onReset,
+		}) {
+			const dirty = draft !== saved;
+			const canReset = saved !== "" || draft !== "";
+			return h("form", {
+				className: "pm-addCard",
+				onSubmit: (event) => {
+					event.preventDefault();
+					onSave();
+				},
+			},
+			h("div", null,
+				h("div", { className: "pm-addTitle" }, t("registryHeading")),
+				h("p", { className: "pm-muted" }, t("registryHint"))),
+			h("div", { className: "pm-chipRow" },
+				h(Button, {
+					type: "button",
+					size: "sm",
+					variant: "outline",
+					disabled: busy,
+					onClick: () => onPreset(""),
+				}, t("registryOfficial")),
+				h(Button, {
+					type: "button",
+					size: "sm",
+					variant: "outline",
+					disabled: busy,
+					onClick: () => onPreset(NPMMIRROR),
+				}, t("registryNpmmirror"))),
+			h("div", { className: "pm-addRow" },
+				h("label", { className: "pm-field" },
+					h("span", { className: "pm-label" }, t("registry")),
+					h("input", {
+						className: "pm-input",
+						value: draft,
+						placeholder: t("registryPlaceholder"),
+						autoComplete: "off",
+						spellCheck: false,
+						disabled: busy,
+						"aria-label": t("registryHeading"),
+						onChange: (event) => onDraftChange(event.target.value),
+					})),
+				h(Button, {
+					type: "submit",
+					variant: "primary",
+					icon: saving
+						? h(IconLoadingOutline16, { size: 16, className: "pm-rotate" })
+						: undefined,
+					disabled: busy || !dirty,
+				}, saving ? t("registrySaving") : t("registrySave"))),
+			h("div", null,
+				h(Button, {
+					type: "button",
+					size: "sm",
+					variant: "ghost",
+					disabled: busy || !canReset,
+					onClick: onReset,
+				}, t("registryReset"))),
+			h("p", { className: "pm-muted" }, source === "custom"
+				? interpolate(t("registryCurrentCustom"), { host })
+				: t("registryCurrentDefault")),
+			error && h("div", { className: "pm-inlineError", role: "alert" },
+				h("strong", null, error.reason),
+				error.advice && h("div", null, error.advice)));
+		}
+
 		function PluginManagerSection({ rpc, t }) {
 			const [state, setState] = React.useState(null);
 			const [packageName, setPackageName] = React.useState("");
@@ -684,9 +805,14 @@ window.__ModuleLoader__.load({
 			const [updates, setUpdates] = React.useState({});
 			const [checking, setChecking] = React.useState("");
 			const [toast, setToast] = React.useState(null);
+			const [registryDraft, setRegistryDraft] = React.useState("");
+			const [registrySaved, setRegistrySaved] = React.useState("");
+			const [savingRegistry, setSavingRegistry] = React.useState(false);
+			const [registryError, setRegistryError] = React.useState(null);
 			const finalOperation = React.useRef("");
 			const preparingLock = React.useRef(false);
 			const checkingLock = React.useRef(false);
+			const savedRegistryRef = React.useRef("");
 			const dismissToast = React.useCallback(() => setToast(null), []);
 			const notify = React.useCallback((text, holdMs = 3500) => {
 				setToast({ id: `${Date.now()}-${Math.random()}`, text, holdMs });
@@ -696,6 +822,11 @@ window.__ModuleLoader__.load({
 				try {
 					const next = await rpc("list");
 					setState(next);
+					const url = next.registry?.url ?? "";
+					setRegistryDraft((current) =>
+						current === savedRegistryRef.current ? url : current);
+					savedRegistryRef.current = url;
+					setRegistrySaved(url);
 					setFailure(null);
 					return next;
 				} catch (error) {
@@ -777,8 +908,29 @@ window.__ModuleLoader__.load({
 					setChecking("");
 				}
 			};
+			const saveRegistry = async (url = registryDraft) => {
+				if (savingRegistry) return;
+				setSavingRegistry(true);
+				try {
+					const result = await rpc("set-registry", { url });
+					const saved = result.registry?.url ?? "";
+					savedRegistryRef.current = saved;
+					setRegistrySaved(saved);
+					setRegistryDraft(saved);
+					setState((previous) => ({
+						...(previous || { plugins: [] }),
+						registry: result.registry,
+					}));
+					setRegistryError(null);
+					notify(t("registrySaved"));
+				} catch (error) {
+					setRegistryError(errorCopy(error, t));
+				} finally {
+					setSavingRegistry(false);
+				}
+			};
 			const busy = state?.operation?.status === "running";
-			const controlsBusy = busy || Boolean(preparing);
+			const controlsBusy = busy || Boolean(preparing) || savingRegistry;
 			const external = state?.plugins.filter((plugin) => plugin.kind === "external") ?? [];
 			const system = state?.plugins.filter((plugin) => plugin.kind !== "external") ?? [];
 			const preparePlugin = (plugin, action, targetVersion) => prepare({
@@ -810,6 +962,20 @@ window.__ModuleLoader__.load({
 									"aria-label": t("refresh"),
 									onClick: () => load().catch(() => {}),
 								}))))),
+				h(RegistryCard, {
+					draft: registryDraft,
+					saved: registrySaved,
+					host: state?.registry?.host ?? "",
+					source: state?.registry?.source ?? "default",
+					busy: controlsBusy,
+					saving: savingRegistry,
+					error: registryError,
+					t,
+					onDraftChange: setRegistryDraft,
+					onPreset: setRegistryDraft,
+					onSave: () => saveRegistry(),
+					onReset: () => saveRegistry(""),
+				}),
 				h("form", {
 					className: "pm-addCard",
 					onSubmit: (event) => {

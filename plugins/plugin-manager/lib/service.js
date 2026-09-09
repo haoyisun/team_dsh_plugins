@@ -9,6 +9,7 @@ import {
   parsePackageSpec,
   redactProcessOutput,
   validateRegistryMetadata,
+  validateRegistryUrl,
 } from './model.js';
 
 const VIEW_FIELDS = [
@@ -127,6 +128,12 @@ export function buildPnpmInvocation(
   return { file: 'pnpm', args };
 }
 
+export function registryEnv(baseEnv, registryUrl) {
+  const env = { ...baseEnv };
+  if (registryUrl) env.npm_config_registry = registryUrl;
+  return env;
+}
+
 export class ProfilePluginService {
   #repoRoot;
   #dshHome;
@@ -136,6 +143,7 @@ export class ProfilePluginService {
   #runProcess;
   #platform;
   #env;
+  #getRegistryUrl;
 
   constructor({
     repoRoot,
@@ -145,6 +153,7 @@ export class ProfilePluginService {
     runProcess,
     platform = process.platform,
     env = process.env,
+    getRegistryUrl = async () => '',
   }) {
     this.#repoRoot = repoRoot;
     this.#dshHome = dshHome;
@@ -154,6 +163,11 @@ export class ProfilePluginService {
     this.#runProcess = runProcess;
     this.#platform = platform;
     this.#env = env;
+    this.#getRegistryUrl = getRegistryUrl;
+  }
+
+  async #registryUrl() {
+    return validateRegistryUrl(await this.#getRegistryUrl());
   }
 
   async #installedPackage(packageName) {
@@ -338,12 +352,14 @@ export class ProfilePluginService {
 
   async resolvePackage(spec) {
     const parsed = typeof spec === 'string' ? parsePackageSpec(spec) : spec;
+    const registryUrl = await this.#registryUrl();
     const invocation = buildPnpmInvocation(
       [
         'view',
         `${parsed.packageName}@${parsed.requestedVersion}`,
         ...VIEW_FIELDS,
         '--json',
+        ...(registryUrl ? ['--registry', registryUrl] : []),
       ],
       this.#platform,
       this.#env,
@@ -351,6 +367,7 @@ export class ProfilePluginService {
     const result = await this.#runProcess({
       ...invocation,
       cwd: this.#profileDir,
+      env: registryEnv(this.#env, registryUrl),
     });
     let metadata;
     try {
@@ -387,6 +404,7 @@ export class ProfilePluginService {
         `${operation.packageName}@${operation.targetVersion}`,
       ];
     }
+    const registryUrl = await this.#registryUrl();
     const result = await this.#runProcess({
       ...buildDshInvocation(
         this.#nodeExecutable,
@@ -394,7 +412,7 @@ export class ProfilePluginService {
         pluginArguments,
       ),
       cwd: this.#profileDir,
-      env: { ...this.#env, DSH_HOME: this.#dshHome },
+      env: registryEnv({ ...this.#env, DSH_HOME: this.#dshHome }, registryUrl),
       timeoutMs: 5 * 60_000,
     });
     return redactProcessOutput(`${result.stdout}\n${result.stderr}`.trim());

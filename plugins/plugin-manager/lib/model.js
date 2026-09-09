@@ -42,6 +42,41 @@ export function isPackageName(value) {
     && NPM_PACKAGE.test(value);
 }
 
+export function validateRegistryUrl(input) {
+  if (input == null) return '';
+  if (typeof input !== 'string') fail('registry URL 必须是字符串');
+  const trimmed = input.trim();
+  if (trimmed.length === 0) return '';
+  if (trimmed.length > 2_048) fail('registry URL 过长');
+  let parsed;
+  try {
+    parsed = new URL(trimmed);
+  } catch {
+    fail('registry URL 无效');
+  }
+  if (!['http:', 'https:'].includes(parsed.protocol)) {
+    fail('registry URL 必须使用 http 或 https');
+  }
+  if (parsed.username || parsed.password) fail('registry URL 不得包含凭据');
+  if (parsed.search || parsed.hash) fail('registry URL 不得包含查询参数或 fragment');
+  const pathname = parsed.pathname.endsWith('/')
+    ? parsed.pathname
+    : `${parsed.pathname}/`;
+  return `${parsed.origin}${pathname}`;
+}
+
+export function publicRegistry(url) {
+  const registryUrl = validateRegistryUrl(url);
+  if (!registryUrl) {
+    return { url: '', host: '', source: 'default' };
+  }
+  return {
+    url: registryUrl,
+    host: new URL(registryUrl).host,
+    source: 'custom',
+  };
+}
+
 export function parsePackageSpec(input) {
   if (typeof input !== 'string' || input !== input.trim() || input.length === 0) {
     fail('包名不能为空或包含首尾空白');

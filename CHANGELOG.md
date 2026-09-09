@@ -6,6 +6,7 @@
 
 ### Added
 
+- `@team-dsh-plugins/plugin-manager` 支持为本页查询和安装单独设置 npm 镜像源，配置保存在 DSH settings，不修改本机或 Profile 的 `.npmrc`。
 - 新增 `@team-dsh-plugins/message-navigator`，通过可滚动里程碑轨道预览并定位长会话中的用户提问。
 - 新增 `@team-dsh-plugins/mcp-manager`，在 DSH 设置中可视化管理全局 MCP Client 实例、凭据、连接测试和工具列表。
 - 新增 `@team-dsh-plugins/plugin-manager`，在 DSH 设置中可视化查看、添加、删除、检查更新、更改版本和恢复 npm 外源插件。

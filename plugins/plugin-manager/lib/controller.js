@@ -4,7 +4,9 @@ import {
   isExactSemver,
   operationFingerprint,
   parsePackageSpec,
+  publicRegistry,
   redactProcessOutput,
+  validateRegistryUrl,
 } from './model.js';
 
 const APPROVAL_TTL_MS = 5 * 60_000;
@@ -107,6 +109,7 @@ function publicObserved(plugin, state) {
 export class PluginManagerController {
   #service;
   #rollback;
+  #registryPrefs;
   #now;
   #createToken;
   #approvals = new Map();
@@ -117,11 +120,16 @@ export class PluginManagerController {
   constructor({
     service,
     rollback,
+    registryPrefs = {
+      read: async () => '',
+      write: async () => {},
+    },
     now = Date.now,
     createToken = () => randomBytes(24).toString('hex'),
   }) {
     this.#service = service;
     this.#rollback = rollback;
+    this.#registryPrefs = registryPrefs;
     this.#now = now;
     this.#createToken = createToken;
   }
@@ -173,11 +181,20 @@ export class PluginManagerController {
   }
 
   async #state() {
+    const [plugins, registryUrl] = await Promise.all([
+      this.#pluginsWithRollback(),
+      this.#registryPrefs.read(),
+    ]);
     return {
-      plugins: await this.#pluginsWithRollback(),
+      plugins,
       operation: this.#operation ? { ...this.#operation } : null,
       readAt: this.#now(),
+      registry: publicRegistry(registryUrl),
     };
+  }
+
+  async #currentRegistry() {
+    return publicRegistry(await this.#registryPrefs.read());
   }
 
   async #manageable(
@@ -330,9 +347,25 @@ export class PluginManagerController {
       operation: {
         ...operation,
         fingerprint,
+        registry: await this.#currentRegistry(),
         ...(metadata ? { metadata } : {}),
       },
     };
+  }
+
+  async #setRegistry(payload) {
+    this.#assertAvailable();
+    if (payload != null && (typeof payload !== 'object' || Array.isArray(payload))) {
+      fail('INVALID_INPUT', '操作参数必须是对象');
+    }
+    let url;
+    try {
+      url = validateRegistryUrl(payload?.url ?? '');
+    } catch (error) {
+      fail('INVALID_REGISTRY', error.message.replace(/^plugin-manager:\s*/u, ''));
+    }
+    await this.#registryPrefs.write(url);
+    return { registry: publicRegistry(url) };
   }
 
   async #verify(operation) {
@@ -554,6 +587,7 @@ export class PluginManagerController {
       else if (endpoint === 'prepare') value = await this.#prepare(payload);
       else if (endpoint === 'execute') value = await this.#execute(payload);
       else if (endpoint === 'check-update') value = await this.#checkUpdate(payload);
+      else if (endpoint === 'set-registry') value = await this.#setRegistry(payload);
       else fail('UNKNOWN_ENDPOINT', '未知 RPC endpoint');
       return { ok: true, value };
     } catch (error) {

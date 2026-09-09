@@ -13,6 +13,12 @@ npx @deepseek-ai/dsh web
 
 打开设置侧边栏中的“插件管理”。页面读取 Web Profile 的实际安装状态，不使用仓库注册表。
 
+## 设置 npm 镜像源
+
+页面顶部可以为本插件单独设置 npm registry。留空则使用本机或 Profile 的默认源；也可一键填入 `https://registry.npmmirror.com`。接受 `http` 或 `https` 地址，例如华为云、腾讯云等带路径前缀的镜像；保存时会补上末尾 `/`，以免 pnpm 拼错包地址。
+
+该设置保存在 DSH settings 的 `plugin-manager` namespace，只作用于本页的版本查询和安装子进程，不会改写 `~/.npmrc` 或 Web Profile 的 `.npmrc`。
+
 ## 添加插件
 
 在顶部输入 npm 包名，例如：
@@ -35,7 +41,7 @@ npx @deepseek-ai/dsh web
 
 “外源插件”区域显示当前版本、Bundle 健康状态和 Profile 停用状态。页面打开和窗口重新获得焦点时会自动刷新本地状态，但不会自动联网查询版本。
 
-点击单个插件的“检查更新”，管理器才会使用 Web Profile 的 pnpm registry、代理和认证配置查询 `latest`。认证信息不会返回浏览器。
+点击单个插件的“检查更新”，管理器才会联网查询 `latest`。若已在本页设置镜像源，查询走该源；否则沿用 Web Profile 的 pnpm registry、代理和认证配置。认证信息不会返回浏览器。
 
 DSH 系统 Bundle 和仓库工作区插件默认折叠在“系统管理”区域中。它们用于解释 Web Profile 中不可修改的 Bundle，不能从该页面更改。
 

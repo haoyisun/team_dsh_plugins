@@ -9,16 +9,20 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 
+import { validateSettings } from '../plugins/plugin-manager/lib/index.js';
 import {
   operationFingerprint,
   parsePackageSpec,
+  publicRegistry,
   redactProcessOutput,
   validateRegistryMetadata,
+  validateRegistryUrl,
 } from '../plugins/plugin-manager/lib/model.js';
 import {
   ProfilePluginService,
   buildDshInvocation,
   buildPnpmInvocation,
+  registryEnv,
 } from '../plugins/plugin-manager/lib/service.js';
 import { PluginManagerController } from '../plugins/plugin-manager/lib/controller.js';
 import { runProcess } from '../plugins/plugin-manager/lib/process.js';
@@ -156,6 +160,81 @@ test('registry metadata must describe the requested DSH bundle safely', () => {
   );
 });
 
+test('registry URLs accept http and https mirrors and keep the trailing slash', () => {
+  assert.equal(validateRegistryUrl(''), '');
+  assert.equal(validateRegistryUrl('   '), '');
+  assert.equal(validateRegistryUrl(undefined), '');
+  assert.equal(
+    validateRegistryUrl('https://registry.npmmirror.com'),
+    'https://registry.npmmirror.com/',
+  );
+  assert.equal(
+    validateRegistryUrl('https://registry.npmmirror.com/'),
+    'https://registry.npmmirror.com/',
+  );
+  assert.equal(
+    validateRegistryUrl('https://registry.npmmirror.com/npm'),
+    'https://registry.npmmirror.com/npm/',
+  );
+  assert.equal(
+    validateRegistryUrl('https://mirrors.huaweicloud.com/repository/npm/'),
+    'https://mirrors.huaweicloud.com/repository/npm/',
+  );
+  assert.equal(
+    validateRegistryUrl('http://mirrors.cloud.tencent.com/npm/'),
+    'http://mirrors.cloud.tencent.com/npm/',
+  );
+  assert.deepEqual(publicRegistry(''), {
+    url: '',
+    host: '',
+    source: 'default',
+  });
+  assert.deepEqual(
+    publicRegistry('https://mirrors.huaweicloud.com/repository/npm/'),
+    {
+      url: 'https://mirrors.huaweicloud.com/repository/npm/',
+      host: 'mirrors.huaweicloud.com',
+      source: 'custom',
+    },
+  );
+});
+
+test('registry URLs reject credentials, query strings, and non-http protocols', () => {
+  for (const value of [
+    'https://user:pass@registry.npmmirror.com',
+    'https://registry.npmmirror.com/?token=1',
+    'https://registry.npmmirror.com/#frag',
+    'file:///tmp/registry',
+    'git://github.com/npm/registry.git',
+    'not-a-url',
+    '//registry.npmmirror.com',
+  ]) {
+    assert.throws(() => validateRegistryUrl(value), { name: 'TypeError' }, value);
+  }
+});
+
+test('settings validation keeps rollback and registry URL in the same namespace', () => {
+  assert.doesNotThrow(() => validateSettings({
+    rollback: { 'dsh-context': '1.0.0' },
+    registryUrl: '',
+  }));
+  assert.doesNotThrow(() => validateSettings({
+    rollback: {},
+    registryUrl: 'https://registry.npmmirror.com/',
+  }));
+  assert.doesNotThrow(() => validateSettings({
+    rollback: {},
+    registryUrl: 'http://mirrors.cloud.tencent.com/npm/',
+  }));
+  assert.throws(
+    () => validateSettings({
+      rollback: {},
+      registryUrl: 'https://user:token@registry.npmmirror.com',
+    }),
+    /registry URL/,
+  );
+});
+
 test('operation approvals bind the exact action and process output is bounded and redacted', () => {
   const install = operationFingerprint({
     action: 'add',
@@ -241,26 +320,73 @@ test('metadata lookup uses profile pnpm configuration and validates the returned
   const metadata = await service.resolvePackage('@scope/plugin@1.2.3');
 
   assert.equal(metadata.version, '1.2.3');
-  assert.deepEqual(calls[0], {
-    file: 'C:\\Windows\\System32\\cmd.exe',
-    args: [
-      '/d',
-      '/s',
-      '/c',
-      'pnpm.cmd',
-      'view',
-      '@scope/plugin@1.2.3',
-      'name',
-      'version',
-      'description',
-      'homepage',
-      'dist.tarball',
-      'scripts',
-      'dsh',
-      '--json',
-    ],
-    cwd: profileDir,
+  assert.equal(calls[0].file, 'C:\\Windows\\System32\\cmd.exe');
+  assert.deepEqual(calls[0].args, [
+    '/d',
+    '/s',
+    '/c',
+    'pnpm.cmd',
+    'view',
+    '@scope/plugin@1.2.3',
+    'name',
+    'version',
+    'description',
+    'homepage',
+    'dist.tarball',
+    'scripts',
+    'dsh',
+    '--json',
+  ]);
+  assert.equal(calls[0].cwd, profileDir);
+  assert.equal(Object.hasOwn(calls[0].env ?? {}, 'npm_config_registry'), false);
+});
+
+test('metadata lookup injects a configured registry without mutating the host env', async () => {
+  const { repoRoot, dshHome, profileDir } = await profileFixture();
+  const env = { ComSpec: 'C:\\Windows\\System32\\cmd.exe', SAFE_ENV: 'value' };
+  const calls = [];
+  const service = new ProfilePluginService({
+    repoRoot,
+    dshHome,
+    dshBin: 'D:\\npx-cache\\dsh\\lib\\bin.js',
+    platform: 'win32',
+    env,
+    getRegistryUrl: async () => 'https://registry.npmmirror.com/',
+    runProcess: async (invocation) => {
+      calls.push(invocation);
+      return {
+        stdout: JSON.stringify({
+          name: '@scope/plugin',
+          version: '1.2.3',
+          'dist.tarball': 'https://registry.npmmirror.com/@scope/plugin/-/plugin-1.2.3.tgz',
+          dsh: { bundle: { patch: './cordis.patch.yml' } },
+        }),
+        stderr: '',
+      };
+    },
   });
+
+  await service.resolvePackage('@scope/plugin@1.2.3');
+
+  assert.equal(calls[0].cwd, profileDir);
+  assert.ok(calls[0].args.includes('--registry'));
+  assert.equal(
+    calls[0].args[calls[0].args.indexOf('--registry') + 1],
+    'https://registry.npmmirror.com/',
+  );
+  assert.equal(calls[0].env.npm_config_registry, 'https://registry.npmmirror.com/');
+  assert.equal(calls[0].env.SAFE_ENV, 'value');
+  assert.equal(Object.hasOwn(env, 'npm_config_registry'), false);
+});
+
+test('registry env copies the base object and only sets npm_config_registry when configured', () => {
+  const base = { PATH: '/usr/bin' };
+  assert.deepEqual(registryEnv(base, ''), { PATH: '/usr/bin' });
+  assert.deepEqual(registryEnv(base, 'https://registry.npmmirror.com'), {
+    PATH: '/usr/bin',
+    npm_config_registry: 'https://registry.npmmirror.com',
+  });
+  assert.equal(Object.hasOwn(base, 'npm_config_registry'), false);
 });
 
 test('process invocations keep package arguments separate and pin the running DSH CLI', () => {
@@ -289,9 +415,10 @@ test('process invocations keep package arguments separate and pin the running DS
   );
 });
 
-function controllerFixture(initialPlugins = [], initialRollback = {}) {
+function controllerFixture(initialPlugins = [], initialRollback = {}, initialRegistry = '') {
   let plugins = structuredClone(initialPlugins);
   let rollbackState = { ...initialRollback };
+  let registryUrl = initialRegistry;
   let releaseMutation;
   const calls = [];
   const service = {
@@ -348,9 +475,16 @@ function controllerFixture(initialPlugins = [], initialRollback = {}) {
       rollbackState = { ...next };
     },
   };
+  const registryPrefs = {
+    read: async () => registryUrl,
+    write: async (next) => {
+      registryUrl = next;
+    },
+  };
   const controller = new PluginManagerController({
     service,
     rollback,
+    registryPrefs,
     now: () => 1_000,
     createToken: () => `token-${calls.length}`,
   });
@@ -358,6 +492,7 @@ function controllerFixture(initialPlugins = [], initialRollback = {}) {
     controller,
     calls,
     rollback: () => rollbackState,
+    registry: () => registryUrl,
     blockMutation() {
       releaseMutation = {};
       return () => releaseMutation.resolve();
@@ -389,6 +524,16 @@ test('controller requires a single-use approval and verifies actual state after 
   assert.equal(state.value.operation.status, 'completed');
   assert.equal(state.value.operation.restartRequired, true);
   assert.equal(state.value.plugins[0].version, '2.0.0');
+  assert.deepEqual(state.value.registry, {
+    url: '',
+    host: '',
+    source: 'default',
+  });
+  assert.deepEqual(prepared.value.operation.registry, {
+    url: '',
+    host: '',
+    source: 'default',
+  });
   assert.equal(calls.length, 1);
 
   const reused = await controller.handle('execute', {
@@ -867,6 +1012,120 @@ test('service runs mutations through the current DSH binary with DSH_HOME', asyn
     timeoutMs: 300_000,
   });
   assert.deepEqual(calls[1].args.slice(-2), ['remove', '@scope/plugin']);
+  assert.equal(Object.hasOwn(calls[0].env, 'npm_config_registry'), false);
+});
+
+test('mutations inherit the configured registry through child process env', async () => {
+  const { repoRoot, dshHome } = await profileFixture();
+  const env = { SAFE_ENV: 'value' };
+  const calls = [];
+  const service = new ProfilePluginService({
+    repoRoot,
+    dshHome,
+    dshBin: 'D:\\npx-cache\\dsh\\lib\\bin.js',
+    nodeExecutable: 'C:\\Program Files\\nodejs\\node.exe',
+    env,
+    getRegistryUrl: async () => 'https://registry.npmmirror.com/',
+    runProcess: async (invocation) => {
+      calls.push(invocation);
+      return { stdout: 'ok', stderr: '' };
+    },
+  });
+
+  await service.runMutation({
+    action: 'change-version',
+    packageName: '@scope/plugin',
+    targetVersion: '1.2.3',
+  });
+
+  assert.equal(calls[0].env.npm_config_registry, 'https://registry.npmmirror.com/');
+  assert.equal(calls[0].env.DSH_HOME, dshHome);
+  assert.equal(Object.hasOwn(env, 'npm_config_registry'), false);
+});
+
+test('controller persists a plugin-scoped registry URL and rejects invalid values', async () => {
+  const fixture = controllerFixture();
+  const listed = await fixture.controller.handle('list');
+  assert.deepEqual(listed.value.registry, {
+    url: '',
+    host: '',
+    source: 'default',
+  });
+
+  const invalid = await fixture.controller.handle('set-registry', {
+    url: 'https://user:token@registry.npmmirror.com',
+  });
+  assert.equal(invalid.ok, false);
+  assert.equal(invalid.error.code, 'INVALID_REGISTRY');
+  assert.equal(fixture.registry(), '');
+
+  const saved = await fixture.controller.handle('set-registry', {
+    url: 'https://registry.npmmirror.com/',
+  });
+  assert.equal(saved.ok, true);
+  assert.deepEqual(saved.value.registry, {
+    url: 'https://registry.npmmirror.com/',
+    host: 'registry.npmmirror.com',
+    source: 'custom',
+  });
+  assert.equal(fixture.registry(), 'https://registry.npmmirror.com/');
+
+  const next = await fixture.controller.handle('list');
+  assert.deepEqual(next.value.registry, saved.value.registry);
+
+  const prepared = await fixture.controller.handle('prepare', {
+    action: 'add',
+    spec: '@scope/plugin',
+  });
+  assert.deepEqual(prepared.value.operation.registry, saved.value.registry);
+
+  const huawei = await fixture.controller.handle('set-registry', {
+    url: 'https://mirrors.huaweicloud.com/repository/npm/',
+  });
+  assert.equal(huawei.ok, true);
+  assert.equal(
+    huawei.value.registry.url,
+    'https://mirrors.huaweicloud.com/repository/npm/',
+  );
+
+  const tencent = await fixture.controller.handle('set-registry', {
+    url: 'http://mirrors.cloud.tencent.com/npm/',
+  });
+  assert.equal(tencent.ok, true);
+  assert.deepEqual(tencent.value.registry, {
+    url: 'http://mirrors.cloud.tencent.com/npm/',
+    host: 'mirrors.cloud.tencent.com',
+    source: 'custom',
+  });
+
+  const cleared = await fixture.controller.handle('set-registry', { url: '' });
+  assert.deepEqual(cleared.value.registry, {
+    url: '',
+    host: '',
+    source: 'default',
+  });
+});
+
+test('controller rejects registry changes while a plugin operation is running', async () => {
+  const fixture = controllerFixture();
+  const release = fixture.blockMutation();
+  const prepared = await fixture.controller.handle('prepare', {
+    action: 'add',
+    spec: '@scope/plugin',
+  });
+  await fixture.controller.handle('execute', {
+    approvalToken: prepared.value.approvalToken,
+  });
+
+  const busy = await fixture.controller.handle('set-registry', {
+    url: 'https://registry.npmmirror.com',
+  });
+  assert.equal(busy.ok, false);
+  assert.equal(busy.error.code, 'OPERATION_BUSY');
+  assert.equal(fixture.registry(), '');
+
+  release();
+  await fixture.controller.waitForIdle();
 });
 
 test('process runner terminates a timed-out child process', async () => {
@@ -901,10 +1160,14 @@ test('plugin package exposes an authenticated localized DSH settings section', a
   assert.equal(manifest.dsh.client.platform, 'web');
   assert.match(host, /ctx\.connection\.rpc\.handle\(\s*['"]\/plugin-manager['"]/);
   assert.match(host, /ctx\.settings\.register\(\s*name/);
+  assert.match(host, /registryUrl/);
   assert.match(client, /id:\s*["']@team-dsh-plugins\/plugin-manager["']/);
   assert.match(client, /settings\.section/);
   assert.match(client, /ctx\.locale\.register/);
   assert.match(client, /ctx\.connection\.rpc\.call\(["']\/plugin-manager["']/);
+  assert.match(client, /set-registry/);
+  assert.match(client, /registryHeading/);
+  assert.match(client, /registry\.npmmirror\.com/);
   assert.match(client, /\bButton\b/);
   assert.match(client, /\bModal\b/);
   assert.match(client, /\bToast\b/);

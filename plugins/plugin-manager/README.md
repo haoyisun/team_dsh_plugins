@@ -5,6 +5,7 @@
 ## 功能
 
 - 查看外源 Bundle、DSH 系统 Bundle 和工作区插件；
+- 为本页的查询和安装单独设置 npm registry（写入 DSH settings 的 `plugin-manager` namespace，不修改本机或 Profile 的 `.npmrc`）；
 - 通过 npm 包名添加插件，或安装指定的精确版本；
 - 手动检查单个插件的最新版本；
 - 更新、降级、恢复上一版本和卸载外源插件；
@@ -21,7 +22,7 @@
 npx @deepseek-ai/dsh web
 ```
 
-打开设置侧边栏中的“插件管理”。添加时只接受 npm registry 包名、`latest` 或精确 semver；不接受版本范围、URL、Git spec 和本地路径。
+打开设置侧边栏中的“插件管理”。可在页面顶部设置仅对本插件生效的 npm 镜像源。添加时只接受 npm registry 包名、`latest` 或精确 semver；不接受版本范围、URL、Git spec 和本地路径。
 
 ## 紧急恢复
 

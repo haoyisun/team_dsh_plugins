@@ -13,7 +13,7 @@ npx @deepseek-ai/dsh web
 | [`@team-dsh-plugins/cost-meter`](plugins/cost-meter) | 可用 | 自动记录模型调用的 token 用量，按可配置的峰谷单价估算费用；在 DSH Web 中展示今日、本周、本月及累计消费、每日趋势、模型明细和 DeepSeek 账户余额。 |
 | [`@team-dsh-plugins/message-navigator`](plugins/message-navigator) | 可用 | 通过带边框的响应式轨道导航长会话中的用户提问，支持当前轮次编号、流式回复提示、悬停预览和按需历史加载。 |
 | [`@team-dsh-plugins/mcp-manager`](plugins/mcp-manager) | 可用 | 在 DSH 设置中粘贴或手动添加 MCP Server，安全预检 JSON/JSONC/YAML 与 DSH Profile MCP patch，并通过测试后保存启用、状态反馈和 DSH credentials 管理全局连接。 |
-| [`@team-dsh-plugins/plugin-manager`](plugins/plugin-manager) | 可用 | 在 DSH 设置侧边栏中查看、添加、删除、检查更新、更改版本和恢复 Web Profile 的 npm 外源插件。 |
+| [`@team-dsh-plugins/plugin-manager`](plugins/plugin-manager) | 可用 | 在 DSH 设置侧边栏中查看、添加、删除、检查更新、更改版本和恢复 Web Profile 的 npm 外源插件，并可为本页单独设置 npm 镜像源。 |
 
 ## 快速开始
 
