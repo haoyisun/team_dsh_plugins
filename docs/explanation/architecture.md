@@ -30,15 +30,15 @@ MCP Server 连接由工作区插件 `@team-dsh-plugins/mcp-manager` 管理。插
 
 ## Windows 桌面壳
 
-`desktop/` 是独立 pnpm 安装边界，不属于根 workspace。它调用 npm CLI 启动官方 DSH Web，并在收到 `127.0.0.1` token URL 后由隔离的 `BrowserWindow` 直接加载。窗口没有 DSH 业务实现，DSH 页面、设置、会话和插件仍由 DSH 自身拥有。
+`desktop/` 是独立 pnpm 安装边界，不属于根 workspace。它调用 npm CLI 启动官方 DSH Web，并在收到 `127.0.0.1` token URL 后由隔离的 `WebContentsView` 加载。BrowserWindow 的本地页面只提供版本工具栏和启动/错误状态，不向 DSH DOM 注入控件；DSH 页面、设置、会话和插件仍由 DSH 自身拥有。
 
 桌面壳只管理自己启动的进程。启动前若 `127.0.0.1:3080` 已被占用，它结合监听 PID 和祖先进程命令行识别 DSH；只有用户确认后才终止已识别的 DSH，未知进程只报告冲突。Windows supervisor 使用 Job Object 绑定 DSH 进程树，确保 App 正常退出或主进程消失后清理子进程。
 
-桌面快捷方式始终指向当前仓库。壳通过 Git 更新，DSH 通过 npm `latest` 更新，插件通过原有目录链接传播；三者没有合并为安装包。
+桌面快捷方式始终指向当前仓库。壳通过 Git 更新；Desktop 首次确认后在 Electron user data 中记录 DSH 精确版本，普通启动不查询 `latest`，只有用户从托盘确认升级后才切换版本；插件通过原有目录链接传播。三者没有合并为安装包。
 
 ## 状态边界
 
-仓库拥有插件代码、注册表、默认值、维护工具、可选桌面壳和规范。DSH Home 拥有 Profile 接入引用、用户设置、凭据、会话、持久数据和缓存。桌面壳只在 Electron user data 中保存脱敏运行日志，不接管 DSH Home。所谓保持 `.dsh` 纯粹，是不再复制插件源码或逐插件手工注册，而不是把 DSH 运行状态移出 DSH Home。
+仓库拥有插件代码、注册表、默认值、维护工具、可选桌面壳和规范。DSH Home 拥有 Profile 接入引用、用户设置、凭据、会话、持久数据和缓存。桌面壳只在 Electron user data 中保存脱敏运行日志和用户确认的 DSH 精确版本，不接管 DSH Home。所谓保持 `.dsh` 纯粹，是不再复制插件源码或逐插件手工注册，而不是把 DSH 运行状态移出 DSH Home。
 
 ## 变化传播
 

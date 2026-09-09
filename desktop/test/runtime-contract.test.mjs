@@ -4,11 +4,11 @@ import test from 'node:test';
 import {
   DshUrlParser,
   classifyListenerProcess,
-  dshNpxArgs,
+  dshExecArgs,
   externalHttpUrl,
   isAllowedDshNavigation,
   matchesDshInspection,
-  npxPowerShellLaunch,
+  npmExecPowerShellLaunch,
   normalizeProcessInspection,
   RedactedLineStream,
   redactSecrets,
@@ -184,26 +184,29 @@ test('listener classification rejects commands that only mention DSH markers', (
   );
 });
 
-test('normal and update launches keep fixed npx arguments separate', () => {
-  assert.deepEqual(dshNpxArgs('normal'), [
+test('DSH launches always bind an exact version', () => {
+  assert.deepEqual(dshExecArgs('1.2.3'), [
     '--yes',
-    '@deepseek-ai/dsh',
+    '@deepseek-ai/dsh@1.2.3',
     'web',
     '--no-open',
   ]);
-  assert.deepEqual(dshNpxArgs('update'), [
+  assert.deepEqual(dshExecArgs('2.0.0-beta.1'), [
     '--yes',
-    '@deepseek-ai/dsh@latest',
+    '@deepseek-ai/dsh@2.0.0-beta.1',
     'web',
     '--no-open',
   ]);
+  for (const invalid of ['latest', '^1.2.3', '../dsh', 'https://example.com/dsh']) {
+    assert.throws(() => dshExecArgs(invalid), /精确 semver/u);
+  }
 });
 
-test('npx launch supports shim layouts without adjacent npm internals', () => {
+test('npm exec launch keeps the selected npm shim and exact version', () => {
   assert.deepEqual(
-    npxPowerShellLaunch({
-      mode: 'normal',
-      npxCommand: 'C:\\Volta\\bin\\npx.cmd',
+    npmExecPowerShellLaunch({
+      version: '1.2.3',
+      npmCommand: 'C:\\Volta\\bin\\npm.cmd',
       powershellExecutable: 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe',
       runnerScript: 'D:\\repo\\desktop\\scripts\\run-npx.ps1',
     }),
@@ -217,8 +220,8 @@ test('npx launch supports shim layouts without adjacent npm internals', () => {
         'Bypass',
         '-File',
         'D:\\repo\\desktop\\scripts\\run-npx.ps1',
-        'C:\\Volta\\bin\\npx.cmd',
-        '@deepseek-ai/dsh',
+        'C:\\Volta\\bin\\npm.cmd',
+        '1.2.3',
       ],
     },
   );

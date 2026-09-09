@@ -10,6 +10,7 @@ for (const name of [
   'build-supervisor.ps1',
   'create-shortcut.ps1',
   'launch.ps1',
+  'query-dsh-latest.ps1',
   'run-npx.ps1',
 ]) {
   test(`${name} is readable by Windows PowerShell 5.1`, async () => {

@@ -11,6 +11,9 @@ importers:
       electron:
         specifier: 44.2.0
         version: 44.2.0
+      semver:
+        specifier: 7.7.2
+        version: 7.7.2
       sharp:
         specifier: ^0.35.4
         version: 0.35.4
@@ -209,6 +212,11 @@ packages:
     resolution: {integrity: sha512-7PiHtLll5LdnKIMw100I+8xJXR5gW2QwWYkT6iJva0bXitZKa/XMrSbdmg3r2Xnaidz9Qumd0VPaMrZlF9V9sA==}
     engines: {node: '>=0.4.0'}
 
+  semver@7.7.2:
+    resolution: {integrity: sha512-RF0Fw+rO5AMf9MAyaRXI4AV0Ulj5lMHqVxxdSgiVbixSCXoEmmX/jk0CuJw4+3SqroYO9VoUh+HcuJivvtJemA==}
+    engines: {node: '>=10'}
+    hasBin: true
+
   semver@7.8.5:
     resolution: {integrity: sha512-Y7/KDsb8LjooZpwaqGyulO6DQlksgCncchHGk+sZIY4SBvUocMBEFH5Ur1fI4dV+Jvl0w6cjvucaIi40puRioA==}
     engines: {node: '>=10'}
@@ -247,7 +255,7 @@ snapshots:
       env-paths: 3.0.0
       graceful-fs: 4.2.11
       progress: 2.0.3
-      semver: 7.8.5
+      semver: 7.7.2
       sumchecker: 3.0.1
     optionalDependencies:
       undici: 7.29.1
@@ -390,6 +398,8 @@ snapshots:
   ms@2.1.3: {}
 
   progress@2.0.3: {}
+
+  semver@7.7.2: {}
 
   semver@7.8.5: {}
 

@@ -1,3 +1,5 @@
+import { isExactDshVersion } from './dsh-release.mjs';
+
 const MAX_STARTUP_BUFFER = 16_384;
 const DSH_URL_PATTERN = /dsh web:\s+(http:\/\/127\.0\.0\.1:\d+\/?\?token=[^\s]+)/i;
 
@@ -205,25 +207,25 @@ export function matchesDshInspection(expected, current) {
   );
 }
 
-export function dshNpxArgs(mode) {
-  if (mode !== 'normal' && mode !== 'update') {
-    throw new TypeError(`未知 DSH 启动模式：${mode}`);
+export function dshExecArgs(version) {
+  if (!isExactDshVersion(version)) {
+    throw new TypeError('DSH 启动版本必须是精确 semver');
   }
   return [
     '--yes',
-    mode === 'update' ? '@deepseek-ai/dsh@latest' : '@deepseek-ai/dsh',
+    `@deepseek-ai/dsh@${version}`,
     'web',
     '--no-open',
   ];
 }
 
-export function npxPowerShellLaunch({
-  mode,
-  npxCommand,
+export function npmExecPowerShellLaunch({
+  version,
+  npmCommand,
   powershellExecutable,
   runnerScript,
 }) {
-  const packageSpec = dshNpxArgs(mode)[1];
+  dshExecArgs(version);
   return {
     executable: powershellExecutable,
     args: [
@@ -234,8 +236,8 @@ export function npxPowerShellLaunch({
       'Bypass',
       '-File',
       runnerScript,
-      npxCommand,
-      packageSpec,
+      npmCommand,
+      version,
     ],
   };
 }

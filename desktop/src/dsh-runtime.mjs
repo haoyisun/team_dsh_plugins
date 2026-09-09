@@ -7,7 +7,7 @@ import { promisify } from 'node:util';
 
 import {
   DshUrlParser,
-  npxPowerShellLaunch,
+  npmExecPowerShellLaunch,
   RedactedLineStream,
   redactSecrets,
 } from './runtime-contract.mjs';
@@ -16,7 +16,7 @@ const execFileAsync = promisify(execFile);
 const STARTUP_TIMEOUT_MS = 120_000;
 const DIAGNOSTIC_LIMIT = 40_000;
 
-async function firstExecutable(name) {
+export async function findExecutable(name) {
   const { stdout } = await execFileAsync('where.exe', [name], {
     windowsHide: true,
     timeout: 10_000,
@@ -29,35 +29,30 @@ async function firstExecutable(name) {
   return executable;
 }
 
-async function resolveNpxLaunch(mode, runnerScript) {
-  const npxCommand = await firstExecutable('npx.cmd');
-  const powershellExecutable = await firstExecutable('powershell.exe');
-  return npxPowerShellLaunch({
-    mode,
-    npxCommand,
-    powershellExecutable,
-    runnerScript,
-  });
-}
-
 export class DshRuntime extends EventEmitter {
   #child;
   #diagnostics = '';
   #intentionalStops = new WeakSet();
   #logger;
+  #npmCommand;
   #ownerPid;
+  #powershellExecutable;
   #repoRoot;
   #supervisorPath;
 
   constructor({
     logger,
+    npmCommand,
     ownerPid,
+    powershellExecutable,
     repoRoot,
     supervisorPath,
   }) {
     super();
     this.#logger = logger;
+    this.#npmCommand = npmCommand;
     this.#ownerPid = ownerPid;
+    this.#powershellExecutable = powershellExecutable;
     this.#repoRoot = repoRoot;
     this.#supervisorPath = supervisorPath;
   }
@@ -70,13 +65,20 @@ export class DshRuntime extends EventEmitter {
     return this.#diagnostics || '尚无 DSH 进程输出。';
   }
 
-  async start(mode = 'normal') {
+  async start(version) {
     if (this.running) throw new Error('DSH 已由当前 App 启动');
     await access(this.#supervisorPath);
-    const launch = await resolveNpxLaunch(
-      mode,
-      path.join(path.dirname(this.#supervisorPath), '..', 'scripts', 'run-npx.ps1'),
-    );
+    const launch = npmExecPowerShellLaunch({
+      version,
+      npmCommand: this.#npmCommand,
+      powershellExecutable: this.#powershellExecutable,
+      runnerScript: path.join(
+        path.dirname(this.#supervisorPath),
+        '..',
+        'scripts',
+        'run-npx.ps1',
+      ),
+    });
     const parser = new DshUrlParser();
     const diagnosticStream = new RedactedLineStream();
     const child = spawn(
@@ -96,7 +98,7 @@ export class DshRuntime extends EventEmitter {
       },
     );
     this.#child = child;
-    this.#record('desktop', `启动 DSH（${mode}）`);
+    this.#record('desktop', `启动 DSH ${version}`);
 
     return new Promise((resolve, reject) => {
       let settled = false;

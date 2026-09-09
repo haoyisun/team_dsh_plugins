@@ -2,7 +2,7 @@
 
 ## 状态
 
-Accepted
+Accepted（DSH 版本更新策略由 ADR-013 取代，窗口组合由 ADR-014 补充）
 
 ## 日期
 
@@ -17,12 +17,12 @@ ADR-001 保留 `npx @deepseek-ai/dsh web` 作为仓库的唯一公共启动契�
 ## 决策
 
 - 在 `desktop/` 提供仅支持 Windows 的可选 Electron 壳。该目录是独立 pnpm 安装边界，不加入根 workspace，也不改变 README 中的默认 DSH 启动方式。
-- Electron 使用官方 npm CLI 启动 `@deepseek-ai/dsh web --no-open`，解析 DSH 输出的 loopback token URL，并在安全隔离的 `BrowserWindow` 中直接加载。壳不实现 DSH 页面或业务功能。
+- Electron 使用官方 npm CLI 启动 `@deepseek-ai/dsh web --no-open`，解析 DSH 输出的 loopback token URL，并在安全隔离的 WebContents 中加载。ADR-014 在 DSH View 上方增加独立壳工具栏；壳仍不实现 DSH 页面或业务功能。
 - App 使用单实例锁。启动前只检查 `127.0.0.1:3080` 的监听进程及其祖先进程命令行；只有识别为 DSH Web 后才向用户展示 PID、命令行和端口并请求终止确认。未知进程只报告端口冲突。
 - DSH 子进程由本地编译的 Windows supervisor 放入启用 `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE` 的 Job Object。App 正常退出时主动停止 supervisor；App 异常消失后 supervisor 退出并由 Windows 清理整个 DSH 进程树。
-- 窗口使用 Windows 原生标题栏。最小化进入任务栏，关闭窗口退出 App 并停止 DSH。托盘只提供显示窗口、重启 DSH、更新 DSH 和退出。
+- 窗口使用 Windows 原生标题栏。最小化进入任务栏，关闭窗口退出 App 并停止 DSH。托盘只提供版本信息、显示窗口、重启 DSH、检查 DSH 更新和退出。
 - `BrowserWindow` 禁用 Node integration，启用 context isolation、sandbox 和 web security；只允许主窗口在本次 DSH origin 内导航。外部 HTTP(S) 链接交给系统浏览器，网页不能获得进程管理 IPC，token 在日志和诊断中脱敏。
-- 不发布安装包或 Electron 自动更新。一次性脚本创建指向当前仓库的桌面快捷方式；壳代码通过 Git 更新，DSH 通过 npm `latest` 更新，工作区插件继续通过现有目录链接传播。
+- 不发布安装包或 Electron 自动更新。一次性脚本创建指向当前仓库的桌面快捷方式；壳代码通过 Git 更新，工作区插件继续通过现有目录链接传播。DSH 的精确版本选择与显式升级由 ADR-013 定义。
 
 ## 备选方案
 

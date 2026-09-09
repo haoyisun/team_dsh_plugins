@@ -19,12 +19,68 @@ body {
   min-width: 20rem;
   min-height: 100vh;
   margin: 0;
-  display: grid;
-  place-items: center;
+}
+
+.toolbar {
+  display: flex;
+  height: 2.75rem;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0 0.75rem;
+  border-bottom: 1px solid #d8dade;
+  background: #fff;
+}
+
+.version {
+  color: #34383e;
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+button {
+  display: inline-flex;
+  min-height: 1.75rem;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.25rem 0.625rem;
+  border: 1px solid #c8cbd0;
+  border-radius: 0.375rem;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+button:hover:not(:disabled) {
+  background: #eceeed;
+}
+
+button:focus-visible {
+  outline: 2px solid #1f6feb;
+  outline-offset: 2px;
+}
+
+button:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.spinner {
+  width: 0.75rem;
+  height: 0.75rem;
+  border: 1.5px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.75s linear infinite;
 }
 
 .status {
+  display: grid;
   width: min(32rem, calc(100vw - 3rem));
+  min-height: calc(100vh - 2.75rem);
+  margin: 0 auto;
+  align-content: center;
   text-align: center;
 }
 
@@ -123,9 +179,19 @@ a.primary {
   }
 }
 
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .progress span {
     width: 100%;
+    animation: none;
+  }
+
+  .spinner {
     animation: none;
   }
 }
@@ -133,6 +199,15 @@ a.primary {
 @media (prefers-color-scheme: dark) {
   :root {
     background: #18191b;
+    color: #f0f1f2;
+  }
+
+  .toolbar {
+    border-color: #393c40;
+    background: #202124;
+  }
+
+  .version {
     color: #f0f1f2;
   }
 
@@ -161,6 +236,14 @@ a.primary {
 
   a:hover {
     background: #26282b;
+  }
+
+  button {
+    border-color: #4a4e54;
+  }
+
+  button:hover:not(:disabled) {
+    background: #303236;
   }
 
   a.primary {

@@ -12,7 +12,7 @@ const desktopRoot = path.resolve(
 );
 
 test(
-  'PowerShell npm exec runner supports a standalone command shim',
+  'PowerShell npm metadata runner supports a standalone command shim',
   { skip: process.platform !== 'win32' },
   async () => {
     const { stdout } = await execFileAsync(
@@ -24,40 +24,15 @@ test(
         '-ExecutionPolicy',
         'Bypass',
         '-File',
-        path.join(desktopRoot, 'scripts', 'run-npx.ps1'),
+        path.join(desktopRoot, 'scripts', 'query-dsh-latest.ps1'),
         path.join(desktopRoot, 'test', 'fixtures', 'npx-shim.cmd'),
-        '1.2.3',
       ],
       { windowsHide: true },
     );
 
     assert.equal(
       stdout.trim(),
-      'exec --yes --prefer-offline -- @deepseek-ai/dsh@1.2.3 web --no-open',
-    );
-  },
-);
-
-test(
-  'PowerShell npm exec runner rejects non-exact versions',
-  { skip: process.platform !== 'win32' },
-  async () => {
-    await assert.rejects(
-      execFileAsync(
-        'powershell.exe',
-        [
-          '-NoLogo',
-          '-NoProfile',
-          '-NonInteractive',
-          '-ExecutionPolicy',
-          'Bypass',
-          '-File',
-          path.join(desktopRoot, 'scripts', 'run-npx.ps1'),
-          path.join(desktopRoot, 'test', 'fixtures', 'npx-shim.cmd'),
-          'latest',
-        ],
-        { windowsHide: true },
-      ),
+      'view @deepseek-ai/dsh dist-tags.latest --json --prefer-online',
     );
   },
 );

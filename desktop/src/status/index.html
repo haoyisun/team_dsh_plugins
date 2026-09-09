@@ -11,6 +11,13 @@
     <link rel="stylesheet" href="./status.css">
   </head>
   <body>
+    <header class="toolbar">
+      <span id="dsh-version" class="version">DSH 版本未选择</span>
+      <button id="check-update" type="button" disabled>
+        <span id="update-spinner" class="spinner" aria-hidden="true" hidden></span>
+        <span id="update-label">检查更新</span>
+      </button>
+    </header>
     <main class="status" aria-live="polite">
       <div class="mark" aria-hidden="true">D</div>
       <p class="eyebrow">DSH Desktop</p>

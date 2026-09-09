@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8">
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; style-src 'self'; script-src 'self'"
+    >
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>DSH Desktop</title>
+    <link rel="stylesheet" href="./dialog.css">
+  </head>
+  <body>
+    <main class="dialog" role="dialog" aria-modal="true" aria-labelledby="dialog-title">
+      <button id="close-action" class="close" type="button" aria-label="关闭">×</button>
+      <div id="dialog-icon" class="icon" aria-hidden="true">i</div>
+      <div class="content">
+        <p class="eyebrow">DSH Desktop</p>
+        <h1 id="dialog-title"></h1>
+        <p id="dialog-message" class="message"></p>
+        <p id="dialog-detail" class="detail"></p>
+      </div>
+      <div class="actions">
+        <button id="secondary-action" class="secondary" type="button"></button>
+        <button id="primary-action" class="primary" type="button"></button>
+      </div>
+    </main>
+    <script src="./dialog.js"></script>
+  </body>
+</html>

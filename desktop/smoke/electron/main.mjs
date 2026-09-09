@@ -8,6 +8,7 @@ import {
   app,
   BrowserWindow,
   nativeImage,
+  WebContentsView,
 } from 'electron';
 
 const desktopRoot = path.resolve(
@@ -38,6 +39,10 @@ app.whenReady().then(async () => {
     path.join(desktopRoot, 'bin', 'app-icon.ico'),
   );
   if (icon.isEmpty()) throw new Error('应用图标无法加载');
+  const trayIcon = nativeImage.createFromPath(
+    path.join(desktopRoot, 'bin', 'tray-icon.ico'),
+  );
+  if (trayIcon.isEmpty()) throw new Error('托盘图标无法加载');
 
   const window = new BrowserWindow({
     show: false,
@@ -54,6 +59,8 @@ app.whenReady().then(async () => {
       query: {
         state: 'error',
         message: 'smoke-test-message',
+        version: '1.2.3',
+        canCheckUpdates: 'true',
       },
     },
   );
@@ -61,16 +68,113 @@ app.whenReady().then(async () => {
     title: document.querySelector('#title')?.textContent,
     message: document.querySelector('#message')?.textContent,
     actionsHidden: document.querySelector('#actions')?.hidden,
-    progressHidden: document.querySelector('#progress')?.hidden
+    progressHidden: document.querySelector('#progress')?.hidden,
+    version: document.querySelector('#dsh-version')?.textContent,
+    updateDisabled: document.querySelector('#check-update')?.disabled
   })`);
   if (
     page.title !== 'DSH 未能启动'
     || page.message !== 'smoke-test-message'
     || page.actionsHidden !== false
     || page.progressHidden !== true
+    || page.version !== 'DSH 1.2.3'
+    || page.updateDisabled !== false
   ) {
     throw new Error(`状态页渲染结果异常：${JSON.stringify(page)}`);
   }
+
+  const updateNavigation = nextNavigation(
+    window.webContents,
+    'will-navigate',
+  );
+  await window.webContents.executeJavaScript(
+    'document.querySelector("#check-update").click()',
+  );
+  assert.equal(
+    (await updateNavigation).url,
+    'dsh-desktop://check-update',
+  );
+
+  await window.loadFile(
+    path.join(desktopRoot, 'src', 'status', 'index.html'),
+    {
+      query: {
+        state: 'ready',
+        version: '1.2.3',
+        canCheckUpdates: 'false',
+        updateActivity: 'checking',
+      },
+    },
+  );
+  const checking = await window.webContents.executeJavaScript(`({
+    buttonText: document.querySelector('#check-update')?.textContent.trim(),
+    buttonBusy: document.querySelector('#check-update')?.getAttribute('aria-busy'),
+    spinnerHidden: document.querySelector('#update-spinner')?.hidden
+  })`);
+  assert.deepEqual(checking, {
+    buttonText: '检查中…',
+    buttonBusy: 'true',
+    spinnerHidden: false,
+  });
+
+  await window.loadFile(
+    path.join(desktopRoot, 'src', 'update-dialog', 'index.html'),
+    {
+      query: {
+        kind: 'warning',
+        title: '升级 DSH',
+        message: '发现 DSH 2.0.0',
+        detail: '当前版本：1.2.3\n目标版本：2.0.0',
+        primary: '升级并重启',
+        secondary: '暂不升级',
+        initialFocus: 'secondary',
+      },
+    },
+  );
+  const dialogPage = await window.webContents.executeJavaScript(`({
+    title: document.querySelector('#dialog-title')?.textContent,
+    message: document.querySelector('#dialog-message')?.textContent,
+    detail: document.querySelector('#dialog-detail')?.textContent,
+    primary: document.querySelector('#primary-action')?.textContent,
+    secondary: document.querySelector('#secondary-action')?.textContent,
+    focused: document.activeElement?.id
+  })`);
+  assert.deepEqual(dialogPage, {
+    title: '升级 DSH',
+    message: '发现 DSH 2.0.0',
+    detail: '当前版本：1.2.3\n目标版本：2.0.0',
+    primary: '升级并重启',
+    secondary: '暂不升级',
+    focused: 'secondary-action',
+  });
+  const dialogChoice = nextNavigation(
+    window.webContents,
+    'will-navigate',
+  );
+  await window.webContents.executeJavaScript(
+    'document.querySelector("#primary-action").click()',
+  );
+  assert.equal((await dialogChoice).url, 'dsh-dialog://primary');
+
+  const dshView = new WebContentsView({
+    webPreferences: {
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+      webSecurity: true,
+    },
+  });
+  window.contentView.addChildView(dshView);
+  dshView.setBounds({ x: 0, y: 44, width: 800, height: 556 });
+  await dshView.webContents.loadFile(
+    path.join(import.meta.dirname, 'frame.html'),
+  );
+  assert.deepEqual(
+    dshView.getBounds(),
+    { x: 0, y: 44, width: 800, height: 556 },
+  );
+  window.contentView.removeChildView(dshView);
+  dshView.webContents.close();
 
   const mainNavigation = nextNavigation(
     window.webContents,
@@ -119,7 +223,7 @@ app.whenReady().then(async () => {
     await once(server, 'close');
   }
 
-  console.log('Electron ESM、导航事件、状态页与应用图标加载正常。');
+  console.log('Electron ESM、导航事件、状态页与图标加载正常。');
   app.exit(0);
 }).catch((error) => {
   console.error(error);

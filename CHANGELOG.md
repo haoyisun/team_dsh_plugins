@@ -17,7 +17,10 @@
 - 外源插件以 DSH Web Profile 实际状态为准；`init` 会安全迁移旧方案留下的禁用覆盖。
 - MCP 管理器支持粘贴 JSON/JSONC/YAML 第三方配置和 DSH Profile MCP patch、安全预检及批量禁用导入；单实例可以在一次确认中测试、保存并启用，已启用实例只有在候选配置测试通过后才会切换。
 - MCP 管理界面改用 DSH Web 原生控件，明确必填项、折叠高级设置，并为启停、测试、重新启动、工具查看和删除提供局部进度与结果反馈。
-- DSH Desktop 改用高分辨率 DeepSeek 风格鱼形图标。
+- DSH Desktop 改用 `deepseek-harness` 官方灰色鱼形路径生成的多分辨率图标。
+- DSH Desktop 首次确认后固定官方 DSH 精确版本；普通启动不再查询 `latest`，用户可从托盘强制检查并确认升级，失败时尽力恢复原版本。
+- DSH Desktop 窗口左上角新增常驻版本工具栏和“检查更新”按钮，无需打开托盘即可查看版本或主动更新。
+- DSH Desktop 检查更新时显示加载动效，并以匹配 DSH Web 风格的本地模态窗替代系统更新对话框。
 
 ### Fixed
 
