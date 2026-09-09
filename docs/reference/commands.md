@@ -43,8 +43,8 @@
 
 - `pnpm install`：安装 Electron，并在本机编译 Job Object supervisor。
 - `pnpm start`：从源码启动可选桌面壳。
-- `pnpm test`：运行桌面壳契约和 supervisor 测试。
-- `pnpm run test:electron`：在真实 Electron 中验证隔离状态页和应用图标。
+- `pnpm test`：运行桌面壳契约、supervisor 和真实 Electron 冒烟测试。
+- `pnpm run test:electron`：只运行真实 Electron 冒烟测试，包括状态页、窗口最小化恢复和应用图标。
 - `pnpm run shortcut`：在当前用户桌面和开始菜单创建指向本仓库的快捷方式，并写入与 Desktop 进程相同的 AppUserModelID。
 
-桌面壳是 ADR-010 定义的可选入口；根目录命令和官方 DSH 启动契约保持不变。Desktop 按 ADR-013 保存用户确认的 DSH 精确版本，普通启动不访问 `latest`；工具栏与托盘提供“重启 DSH”，检查与确认升级也可从这两处完成。
+桌面壳是 ADR-010 定义的可选入口；根目录命令和官方 DSH 启动契约保持不变。Desktop 按 ADR-013 保存用户确认的 DSH 精确版本，普通启动不访问 `latest`；工具栏与托盘提供“重启 DSH”，检查与确认升级也可从这两处完成。会话、renderer 和窗口恢复边界由 ADR-017 定义。

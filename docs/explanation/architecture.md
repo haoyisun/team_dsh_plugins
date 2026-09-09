@@ -34,6 +34,8 @@ MCP Server 连接由工作区插件 `@team-dsh-plugins/mcp-manager` 管理。插
 
 桌面壳只管理自己启动的进程。启动前若 `127.0.0.1:3080` 已被占用，它结合监听 PID 和祖先进程命令行识别 DSH；只有用户确认后才终止已识别的 DSH，未知进程只报告冲突。Windows supervisor 使用 Job Object 绑定 DSH 进程树，确保 App 正常退出或主进程消失后清理子进程。
 
+Desktop 以带代际的会话状态绑定每次启动的 supervisor 实例，陈旧异步操作不能停止或覆盖后续实例。窗口表面控制器统一管理 DSH View 的挂载和有效边界，在最小化、恢复及显示器变化后自动 reconcile，不重载 DSH 或改变焦点。本地 shell 只加载一次，通过受限 preload 接收脱敏状态；它与 DSH View 使用不同导航权限，并按 shell renderer、DSH renderer 和 runtime 三类故障提供不同恢复动作。
+
 桌面和开始菜单快捷方式始终指向当前仓库，并与 Desktop 进程共用 AppUserModelID，以便任务栏固定沿用自定义图标。壳通过 Git 更新；Desktop 首次确认后在 Electron user data 中记录 DSH 精确版本，普通启动不查询 `latest`，只有用户从托盘确认升级后才切换版本；插件通过原有目录链接传播。三者没有合并为安装包。
 
 ## 状态边界
