@@ -8,7 +8,6 @@ const desktopRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '
 
 for (const name of [
   'build-supervisor.ps1',
-  'create-shortcut.ps1',
   'launch.ps1',
   'query-dsh-latest.ps1',
   'run-npx.ps1',

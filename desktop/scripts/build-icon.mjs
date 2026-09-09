@@ -34,72 +34,117 @@ const traySvgCode = svgCode
     'transform="translate(0.42, 3.48)"',
   );
 
-function createIco(buffers, sizes) {
-  const header = Buffer.alloc(6);
-  header.writeUInt16LE(0, 0);
-  header.writeUInt16LE(1, 2);
-  header.writeUInt16LE(buffers.length, 4);
+const APP_ICON_SIZES = [16, 20, 24, 32, 40, 48, 64, 256];
+const TRAY_ICON_SIZES = [16, 20, 24, 32, 40, 48, 64];
 
-  const directorySize = buffers.length * 16;
-  const directory = Buffer.alloc(directorySize);
-  
-  let offset = 6 + directorySize;
-  
-  for (let i = 0; i < buffers.length; i++) {
-    const size = sizes[i];
-    const width = size === 256 ? 0 : size;
-    const height = size === 256 ? 0 : size;
-    const buffer = buffers[i];
-    
-    directory.writeUInt8(width, i * 16 + 0);
-    directory.writeUInt8(height, i * 16 + 1);
-    directory.writeUInt8(0, i * 16 + 2);
-    directory.writeUInt8(0, i * 16 + 3);
-    directory.writeUInt16LE(1, i * 16 + 4);
-    directory.writeUInt16LE(32, i * 16 + 6);
-    directory.writeUInt32LE(buffer.length, i * 16 + 8);
-    directory.writeUInt32LE(offset, i * 16 + 12);
-    
-    offset += buffer.length;
+function createBmpIcon({ data, info }) {
+  const size = info.width;
+  const xorSize = size * size * 4;
+  const andRowBytes = ((size + 31) >> 5) << 2;
+  const andSize = andRowBytes * size;
+  const header = Buffer.alloc(40);
+  header.writeUInt32LE(40, 0);
+  header.writeInt32LE(size, 4);
+  header.writeInt32LE(size * 2, 8);
+  header.writeUInt16LE(1, 12);
+  header.writeUInt16LE(32, 14);
+  header.writeUInt32LE(xorSize + andSize, 20);
+
+  const xor = Buffer.alloc(xorSize);
+  const andMask = Buffer.alloc(andSize);
+  for (let y = 0; y < size; y += 1) {
+    const sourceY = size - 1 - y;
+    for (let x = 0; x < size; x += 1) {
+      const source = (sourceY * size + x) * 4;
+      const dest = (y * size + x) * 4;
+      xor[dest] = data[source + 2];
+      xor[dest + 1] = data[source + 1];
+      xor[dest + 2] = data[source];
+      xor[dest + 3] = data[source + 3];
+      if (data[source + 3] < 128) {
+        andMask[y * andRowBytes + (x >> 3)] |= 1 << (7 - (x % 8));
+      }
+    }
   }
-  
-  return Buffer.concat([header, directory, ...buffers]);
+  return Buffer.concat([header, xor, andMask]);
+}
+
+function createIco(images) {
+  const header = Buffer.alloc(6);
+  header.writeUInt16LE(1, 2);
+  header.writeUInt16LE(images.length, 4);
+
+  const directorySize = images.length * 16;
+  const directory = Buffer.alloc(directorySize);
+  let offset = 6 + directorySize;
+  const payloads = [];
+
+  for (let index = 0; index < images.length; index += 1) {
+    const { size, data } = images[index];
+    const width = size === 256 ? 0 : size;
+    directory.writeUInt8(width, index * 16);
+    directory.writeUInt8(width, index * 16 + 1);
+    directory.writeUInt16LE(1, index * 16 + 4);
+    directory.writeUInt16LE(32, index * 16 + 6);
+    directory.writeUInt32LE(data.length, index * 16 + 8);
+    directory.writeUInt32LE(offset, index * 16 + 12);
+    payloads.push(data);
+    offset += data.length;
+  }
+
+  return Buffer.concat([header, directory, ...payloads]);
+}
+
+async function rasterPng(svg, size) {
+  return sharp(Buffer.from(svg))
+    .resize(size, size, { kernel: 'lanczos3' })
+    .png({ compressionLevel: 9 })
+    .toBuffer();
+}
+
+async function rasterBmp(svg, size) {
+  const raw = await sharp(Buffer.from(svg))
+    .resize(size, size, { kernel: 'lanczos3' })
+    .ensureAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+  return createBmpIcon(raw);
 }
 
 async function build() {
   await mkdir(outputDirectory, { recursive: true });
 
-  const sizes = [16, 32, 48, 64, 128, 256];
-  const buffers = [];
-  const traySizes = [16, 20, 24, 32, 40, 48, 64];
-  const trayBuffers = [];
-  
-  for (const size of sizes) {
-    const buffer = await sharp(Buffer.from(svgCode))
-      .resize(size, size, { kernel: 'lanczos3' })
-      .png({ compressionLevel: 9 })
-      .toBuffer();
-    buffers.push(buffer);
+  const appImages = [];
+  let png256;
+  for (const size of APP_ICON_SIZES) {
+    if (size === 256) {
+      png256 = await rasterPng(svgCode, size);
+      appImages.push({ size, data: png256 });
+      continue;
+    }
+    appImages.push({ size, data: await rasterBmp(svgCode, size) });
   }
 
-  for (const size of traySizes) {
-    const buffer = await sharp(Buffer.from(traySvgCode))
-      .resize(size, size, { kernel: 'lanczos3' })
-      .png({ compressionLevel: 9 })
-      .toBuffer();
-    trayBuffers.push(buffer);
+  const trayImages = [];
+  let trayPng16;
+  for (const size of TRAY_ICON_SIZES) {
+    const data = await rasterBmp(traySvgCode, size);
+    trayImages.push({ size, data });
+    if (size === 16) {
+      trayPng16 = await rasterPng(traySvgCode, size);
+    }
   }
 
-  const icoBuffer = createIco(buffers, sizes);
-  const trayIcoBuffer = createIco(trayBuffers, traySizes);
-  
   await Promise.all([
-    writeFile(path.join(outputDirectory, 'app-icon.png'), buffers[5]),
-    writeFile(path.join(outputDirectory, 'app-icon.ico'), icoBuffer),
-    writeFile(path.join(outputDirectory, 'tray-icon.png'), trayBuffers[0]),
-    writeFile(path.join(outputDirectory, 'tray-icon.ico'), trayIcoBuffer),
+    writeFile(path.join(outputDirectory, 'app-icon.png'), png256),
+    writeFile(path.join(outputDirectory, 'app-icon.ico'), createIco(appImages)),
+    writeFile(path.join(outputDirectory, 'tray-icon.png'), trayPng16),
+    writeFile(
+      path.join(outputDirectory, 'tray-icon.ico'),
+      createIco(trayImages),
+    ),
   ]);
-  
+
   console.log('Built Windows app and tray icons using SVG & Sharp.');
 }
 

@@ -27,6 +27,8 @@
 - `pnpm run init` 现在会在仓库迁移后自动替换指向旧路径或已经悬空的插件 scope 链接。
 - Windows PowerShell 5.1 现在可以正确解析桌面快捷方式创建与启动脚本。
 - DSH Desktop 快捷方式直接调用本地 Electron，不再依赖 Explorer 环境中的 `pnpm` PATH；启动异常会显示退出码而不是静默闪退。
+- DSH Desktop 为进程和快捷方式设置同一 AppUserModelID，并用内容哈希图标路径绕过 Explorer 旧缓存，固定或右键任务栏图标时继续使用自定义图标。
+- DSH Desktop 任务栏图标改为标准多尺寸 ICO，避免 Windows 把透明背景画成黑底，从而和 `app-icon.png` 对不上。
 
 ### Removed
 

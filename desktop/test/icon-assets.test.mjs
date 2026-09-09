@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
+import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
@@ -103,4 +104,53 @@ test('taskbar icon combines the gray mark with a light-to-black outline', async 
     darkEdgePixels >= 10,
     'the outline must transition to a deep-black edge',
   );
+});
+
+function parseIco(buffer) {
+  const count = buffer.readUInt16LE(4);
+  const entries = [];
+  let offset = 6;
+  for (let index = 0; index < count; index += 1) {
+    const width = buffer[offset] || 256;
+    const bytes = buffer.readUInt32LE(offset + 8);
+    const imageOffset = buffer.readUInt32LE(offset + 12);
+    const data = buffer.subarray(imageOffset, imageOffset + bytes);
+    entries.push({
+      width,
+      isPng: data[0] === 0x89 && data[1] === 0x50 && data[2] === 0x4e && data[3] === 0x47,
+      isBmp: data.readUInt32LE(0) === 40,
+      data,
+    });
+    offset += 16;
+  }
+  return entries;
+}
+
+test('app ICO stores taskbar sizes as 32-bpp BMP so Windows keeps the transparent outline', async () => {
+  await execFileAsync(process.execPath, [
+    path.join(desktopRoot, 'scripts', 'build-icon.mjs'),
+  ]);
+
+  const entries = parseIco(
+    await readFile(path.join(desktopRoot, 'bin', 'app-icon.ico')),
+  );
+  assert.deepEqual(
+    entries.map((entry) => entry.width),
+    [16, 20, 24, 32, 40, 48, 64, 256],
+  );
+
+  for (const entry of entries) {
+    if (entry.width === 256) {
+      assert.equal(entry.isPng, true, '256px ICO image must stay PNG');
+      continue;
+    }
+    assert.equal(entry.isBmp, true, `${entry.width}px ICO image must be a BMP DIB`);
+    assert.equal(entry.isPng, false);
+    assert.equal(entry.data.readInt32LE(8), entry.width * 2);
+  }
+
+  const bmp32 = entries.find((entry) => entry.width === 32);
+  const xor = bmp32.data.subarray(40, 40 + 32 * 32 * 4);
+  const topLeft = xor.subarray((32 - 1) * 32 * 4, (32 - 1) * 32 * 4 + 4);
+  assert.equal(topLeft[3], 0, 'the 32px taskbar frame must keep a transparent corner');
 });

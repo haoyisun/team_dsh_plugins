@@ -14,6 +14,7 @@ import {
   WebContentsView,
 } from 'electron';
 
+import { APP_DISPLAY_NAME, APP_USER_MODEL_ID } from './app-identity.mjs';
 import {
   activateDshRelease,
   chooseDshReleaseForStartup,
@@ -74,7 +75,8 @@ let restartActivity;
 let tray;
 let updateActivity;
 
-app.setName('DSH Desktop');
+app.setAppUserModelId(APP_USER_MODEL_ID);
+app.setName(APP_DISPLAY_NAME);
 const hasSingleInstanceLock = app.requestSingleInstanceLock();
 if (!hasSingleInstanceLock) {
   app.quit();
@@ -95,7 +97,7 @@ function showMainWindow() {
 function appIcon() {
   const image = nativeImage.createFromPath(iconPath);
   if (image.isEmpty()) throw new Error('无法加载 DSH Desktop 图标');
-  return image;
+  return iconPath;
 }
 
 function trayIcon() {

@@ -21,7 +21,7 @@ pnpm test
 pnpm run shortcut
 ```
 
-安装会在本机编译 Windows supervisor。`shortcut` 在当前用户桌面创建 `DSH Desktop` 快捷方式，之后可直接双击启动。
+安装会在本机编译 Windows supervisor。`shortcut` 在当前用户桌面和开始菜单创建带同一 AppUserModelID 的 `DSH Desktop` 快捷方式，之后可直接双击启动；固定到任务栏时也会沿用自定义图标。若任务栏上已经固定过旧的 Electron 默认图标，先取消固定，再重新运行 `pnpm run shortcut` 并重新固定。
 
 首次启动会查询 npm 当前发布的 DSH 版本，并显示“安装并固定”确认框。只有确认后才会下载和启动；成功加载 DSH Web 后，Desktop 才保存该精确版本。
 
@@ -50,7 +50,7 @@ cd desktop
 pnpm install
 ```
 
-重新启动 App 即可使用更新后的壳。桌面快捷方式仍指向当前仓库，无需重新创建；仓库移动后应重新运行根目录的 `pnpm run init` 和 `desktop` 目录的 `pnpm run shortcut`。
+重新启动 App 即可使用更新后的壳。已有快捷方式在仓库未移动时无需重建；若要让任务栏固定使用自定义图标，或仓库已经移动，应重新运行 `desktop` 目录的 `pnpm run shortcut`。仓库移动后还要重新运行根目录的 `pnpm run init`。
 
 更新 DSH 本身时，在托盘菜单选择“检查 DSH 更新…”。检查只读取 npm 元数据，不停止当前 DSH。发现更高版本后，App 会显示当前版本和目标版本；选择“暂不升级”不会改变进程或版本记录，选择“升级并重启”才会切换。
 
@@ -71,4 +71,4 @@ App 始终使用同一个 npm 安装执行官方 `@deepseek-ai/dsh@<精确版本
 
 ## 移除桌面壳
 
-退出 App，删除桌面的 `DSH Desktop` 快捷方式即可。需要释放磁盘空间时还可以删除 `desktop/node_modules` 和 `desktop/bin`；这不会删除 DSH Home 中的设置、会话、凭据或插件数据。
+退出 App，删除桌面和开始菜单中的 `DSH Desktop` 快捷方式即可。需要释放磁盘空间时还可以删除 `desktop/node_modules` 和 `desktop/bin`；这不会删除 DSH Home 中的设置、会话、凭据或插件数据。

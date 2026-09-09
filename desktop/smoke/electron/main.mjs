@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
+import { mkdtemp, rm } from 'node:fs/promises';
 import { createServer } from 'node:http';
+import { tmpdir } from 'node:os';
 import { once } from 'node:events';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -8,8 +10,12 @@ import {
   app,
   BrowserWindow,
   nativeImage,
+  shell,
   WebContentsView,
 } from 'electron';
+
+import { APP_USER_MODEL_ID } from '../../src/app-identity.mjs';
+import { buildShortcutPlan } from '../../src/shortcut.mjs';
 
 const desktopRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -43,6 +49,31 @@ app.whenReady().then(async () => {
     path.join(desktopRoot, 'bin', 'tray-icon.ico'),
   );
   if (trayIcon.isEmpty()) throw new Error('托盘图标无法加载');
+
+  const shortcutDir = await mkdtemp(path.join(tmpdir(), 'dsh-desktop-shortcut-'));
+  try {
+    const [shortcut] = buildShortcutPlan({
+      desktopRoot,
+      desktopDirectory: shortcutDir,
+      startMenuDirectory: shortcutDir,
+      powershellExecutable: path.join(
+        process.env.SystemRoot || 'C:\\Windows',
+        'System32',
+        'WindowsPowerShell',
+        'v1.0',
+        'powershell.exe',
+      ),
+      iconPath: path.join(desktopRoot, 'bin', 'app-icon.ico'),
+    });
+    if (!shell.writeShortcutLink(shortcut.path, 'create', shortcut.options)) {
+      throw new Error('无法写入带 AppUserModelID 的快捷方式');
+    }
+    const details = shell.readShortcutLink(shortcut.path);
+    assert.equal(details.appUserModelId, APP_USER_MODEL_ID);
+    assert.equal(details.icon, shortcut.options.icon);
+  } finally {
+    await rm(shortcutDir, { recursive: true, force: true });
+  }
 
   const window = new BrowserWindow({
     show: false,
