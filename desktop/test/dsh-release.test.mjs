@@ -212,6 +212,38 @@ test('failed upgrades restore the previous exact version without committing', as
   ]);
 });
 
+test('an upgrade that becomes unhealthy during commit restores runtime and selection', async () => {
+  const events = [];
+  const result = await activateDshRelease({
+    targetVersion: '2.0.0',
+    previousVersion: '1.5.0',
+    stop: async () => events.push('stop'),
+    start: async (version) => {
+      events.push(`start:${version}`);
+      return `http://127.0.0.1:3080/?version=${version}`;
+    },
+    load: async () => events.push('load'),
+    commit: async (version) => events.push(`commit:${version}`),
+    validate: async () => {
+      events.push('validate');
+      throw new Error('candidate exited during commit');
+    },
+  });
+
+  assert.equal(result.status, 'rolled-back');
+  assert.deepEqual(events, [
+    'stop',
+    'start:2.0.0',
+    'load',
+    'commit:2.0.0',
+    'validate',
+    'stop',
+    'start:1.5.0',
+    'load',
+    'commit:1.5.0',
+  ]);
+});
+
 test('failed rollback reports both activation failures', async () => {
   await assert.rejects(
     activateDshRelease({

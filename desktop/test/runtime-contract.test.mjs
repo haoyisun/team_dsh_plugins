@@ -4,6 +4,7 @@ import test from 'node:test';
 import {
   DshUrlParser,
   classifyListenerProcess,
+  desktopNavigationAction,
   dshExecArgs,
   externalHttpUrl,
   isAllowedDshNavigation,
@@ -95,6 +96,30 @@ test('navigation is limited to the exact DSH origin', () => {
   );
 });
 
+test('shell and DSH contents use separate navigation capabilities', () => {
+  const candidate = 'http://127.0.0.1:3080/chat/1';
+  const expectedOrigin = 'http://127.0.0.1:3080';
+
+  assert.equal(desktopNavigationAction({
+    candidate,
+    current: 'file:///D:/desktop/status/index.html',
+    expectedOrigin,
+    role: 'shell',
+  }), 'external');
+  assert.equal(desktopNavigationAction({
+    candidate,
+    current: 'http://127.0.0.1:3080/',
+    expectedOrigin,
+    role: 'dsh',
+  }), 'allow');
+  assert.equal(desktopNavigationAction({
+    candidate: 'dsh-desktop://restart',
+    current: 'file:///D:/desktop/status/index.html',
+    expectedOrigin,
+    role: 'shell',
+  }), 'desktop-action');
+});
+
 test('external navigation only opens bounded HTTP URLs', () => {
   assert.equal(
     externalHttpUrl('https://example.com/docs'),
@@ -102,6 +127,10 @@ test('external navigation only opens bounded HTTP URLs', () => {
   );
   assert.equal(externalHttpUrl('file:///C:/Windows/System32/calc.exe'), undefined);
   assert.equal(externalHttpUrl('custom-protocol://run'), undefined);
+  assert.equal(
+    externalHttpUrl('https://example.com/?token=desktop-secret'),
+    undefined,
+  );
   assert.equal(
     externalHttpUrl(`https://example.com/${'a'.repeat(2082)}`),
     undefined,

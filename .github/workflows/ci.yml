@@ -33,3 +33,26 @@ jobs:
 
       - name: Test
         run: pnpm test
+
+  desktop:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+          cache-dependency-path: desktop/pnpm-lock.yaml
+
+      - name: Install Desktop dependencies
+        working-directory: desktop
+        run: pnpm install --frozen-lockfile
+
+      - name: Test Desktop
+        working-directory: desktop
+        run: pnpm test

@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url';
 import {
   app,
   BrowserWindow,
+  ipcMain,
   nativeImage,
   shell,
   WebContentsView,
@@ -16,6 +17,8 @@ import {
 
 import { APP_USER_MODEL_ID } from '../../src/app-identity.mjs';
 import { buildShortcutPlan } from '../../src/shortcut.mjs';
+import { ShellView } from '../../src/shell-view.mjs';
+import { WindowSurface } from '../../src/window-surface.mjs';
 
 const desktopRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -80,22 +83,35 @@ app.whenReady().then(async () => {
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
+      preload: path.join(
+        desktopRoot,
+        'src',
+        'status',
+        'preload.cjs',
+      ),
       sandbox: true,
       webSecurity: true,
     },
   });
-  await window.loadFile(
-    path.join(desktopRoot, 'src', 'status', 'index.html'),
-    {
-      query: {
-        state: 'error',
-        message: 'smoke-test-message',
-        version: '1.2.3',
-        canRestart: 'true',
-        canCheckUpdates: 'true',
-      },
-    },
-  );
+  const shellView = new ShellView({
+    ipcMain,
+    statusPage: path.join(
+      desktopRoot,
+      'src',
+      'status',
+      'index.html',
+    ),
+    window,
+  });
+  await shellView.render({
+    errorKind: 'page',
+    state: 'error',
+    message: 'smoke-test-message',
+    version: '1.2.3',
+    canRestart: true,
+    canCheckUpdates: true,
+    recoveryAction: 'reload-page',
+  });
   const page = await window.webContents.executeJavaScript(`({
     title: document.querySelector('#title')?.textContent,
     message: document.querySelector('#message')?.textContent,
@@ -109,6 +125,8 @@ app.whenReady().then(async () => {
     updateTag: document.querySelector('#check-update')?.tagName,
     restartClass: document.querySelector('#restart-dsh')?.className,
     updateClass: document.querySelector('#check-update')?.className,
+    recoveryText: document.querySelector('#recovery-action')?.textContent,
+    recoveryHref: document.querySelector('#recovery-action')?.getAttribute('href'),
     buttonStyles: (() => {
       const keys = [
         'minHeight',
@@ -134,7 +152,7 @@ app.whenReady().then(async () => {
     })()
   })`);
   if (
-    page.title !== 'DSH 未能启动'
+    page.title !== 'DSH 页面需要恢复'
     || page.message !== 'smoke-test-message'
     || page.actionsHidden !== false
     || page.progressHidden !== true
@@ -145,6 +163,8 @@ app.whenReady().then(async () => {
     || page.restartTag !== 'BUTTON'
     || page.updateTag !== 'BUTTON'
     || page.restartClass !== page.updateClass
+    || page.recoveryText !== '重新加载页面'
+    || page.recoveryHref !== 'dsh-desktop://reload-page'
   ) {
     throw new Error(`状态页渲染结果异常：${JSON.stringify(page)}`);
   }
@@ -174,41 +194,37 @@ app.whenReady().then(async () => {
     'dsh-desktop://check-update',
   );
 
-  await window.loadFile(
-    path.join(desktopRoot, 'src', 'status', 'index.html'),
-    {
-      query: {
-        state: 'ready',
-        version: '1.2.3',
-        canCheckUpdates: 'false',
-        updateActivity: 'checking',
-      },
-    },
-  );
+  await shellView.render({
+    state: 'ready',
+    version: '1.2.3',
+    canCheckUpdates: false,
+    updateActivity: 'checking',
+  });
   const checking = await window.webContents.executeJavaScript(`({
+    title: document.querySelector('#title')?.textContent,
+    message: document.querySelector('#message')?.textContent,
+    progressHidden: document.querySelector('#progress')?.hidden,
     buttonText: document.querySelector('#check-update')?.textContent.trim(),
     buttonBusy: document.querySelector('#check-update')?.getAttribute('aria-busy'),
     spinnerHidden: document.querySelector('#update-spinner')?.hidden
   })`);
   assert.deepEqual(checking, {
+    title: 'DSH 已启动',
+    message: '正在显示 DSH 页面。',
+    progressHidden: true,
     buttonText: '检查中…',
     buttonBusy: 'true',
     spinnerHidden: false,
   });
 
-  await window.loadFile(
-    path.join(desktopRoot, 'src', 'status', 'index.html'),
-    {
-      query: {
-        state: 'starting',
-        message: '正在重启 DSH…',
-        version: '1.2.3',
-        canRestart: 'false',
-        canCheckUpdates: 'false',
-        restartActivity: 'restarting',
-      },
-    },
-  );
+  await shellView.render({
+    state: 'starting',
+    message: '正在重启 DSH…',
+    version: '1.2.3',
+    canRestart: false,
+    canCheckUpdates: false,
+    restartActivity: 'restarting',
+  });
   const restarting = await window.webContents.executeJavaScript(`({
     restartText: document.querySelector('#restart-label')?.textContent.trim(),
     restartBusy: document.querySelector('#restart-dsh')?.getAttribute('aria-busy'),
@@ -226,6 +242,7 @@ app.whenReady().then(async () => {
     updateBusy: null,
   });
 
+  shellView.dispose();
   await window.loadFile(
     path.join(desktopRoot, 'src', 'update-dialog', 'index.html'),
     {
@@ -273,16 +290,50 @@ app.whenReady().then(async () => {
       webSecurity: true,
     },
   });
-  window.contentView.addChildView(dshView);
-  dshView.setBounds({ x: 0, y: 44, width: 800, height: 556 });
+  const surface = new WindowSurface({
+    mainWindow: window,
+    toolbarHeight: 44,
+    view: dshView,
+  });
   await dshView.webContents.loadFile(
     path.join(import.meta.dirname, 'frame.html'),
   );
+  surface.showDsh();
+  window.show();
+  await new Promise((resolve) => setImmediate(resolve));
+  const initialContentBounds = window.getContentBounds();
   assert.deepEqual(
     dshView.getBounds(),
-    { x: 0, y: 44, width: 800, height: 556 },
+    {
+      x: 0,
+      y: 44,
+      width: initialContentBounds.width,
+      height: initialContentBounds.height - 44,
+    },
   );
-  window.contentView.removeChildView(dshView);
+
+  const minimized = once(window, 'minimize');
+  window.minimize();
+  await minimized;
+  const restored = once(window, 'restore');
+  window.restore();
+  await restored;
+  await new Promise((resolve) => setImmediate(resolve));
+  const restoredContentBounds = window.getContentBounds();
+  assert.deepEqual(
+    dshView.getBounds(),
+    {
+      x: 0,
+      y: 44,
+      width: restoredContentBounds.width,
+      height: restoredContentBounds.height - 44,
+    },
+  );
+  assert.equal(window.contentView.children.includes(dshView), true);
+
+  surface.showStatus();
+  await new Promise((resolve) => setImmediate(resolve));
+  surface.dispose();
   dshView.webContents.close();
 
   const mainNavigation = nextNavigation(

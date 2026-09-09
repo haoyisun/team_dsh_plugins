@@ -97,6 +97,28 @@ export function isAllowedDshNavigation(candidate, expectedOrigin) {
   }
 }
 
+export function desktopNavigationAction({
+  candidate,
+  current,
+  expectedOrigin,
+  role,
+}) {
+  if (
+    role === 'shell'
+    && String(current).startsWith('file:')
+    && String(candidate).startsWith('dsh-desktop://')
+  ) {
+    return 'desktop-action';
+  }
+  if (
+    role === 'dsh'
+    && isAllowedDshNavigation(candidate, expectedOrigin)
+  ) {
+    return 'allow';
+  }
+  return 'external';
+}
+
 export function externalHttpUrl(candidate) {
   const raw = String(candidate);
   if (raw.length > 2_081) return undefined;
@@ -106,6 +128,10 @@ export function externalHttpUrl(candidate) {
       (url.protocol !== 'http:' && url.protocol !== 'https:')
       || url.username
       || url.password
+      || [...url.searchParams.keys()].some(
+        (key) => /^(?:access_|id_|refresh_)?token$/iu.test(key),
+      )
+      || /(?:^|[?&#])(?:access_|id_|refresh_)?token=/iu.test(url.hash)
       || url.href.length > 2_081
     ) {
       return undefined;

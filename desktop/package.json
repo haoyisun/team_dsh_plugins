@@ -15,7 +15,7 @@
     "postinstall": "pnpm run build:supervisor && pnpm run build:assets",
     "shortcut": "electron scripts/create-shortcut.mjs",
     "start": "electron .",
-    "test": "node --test",
+    "test": "node --test && pnpm run test:electron",
     "test:electron": "electron smoke/electron"
   },
   "devDependencies": {

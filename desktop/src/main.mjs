@@ -6,8 +6,10 @@ import {
   BrowserWindow,
   clipboard,
   dialog,
+  ipcMain,
   Menu,
   nativeImage,
+  screen,
   session,
   shell,
   Tray,
@@ -15,6 +17,10 @@ import {
 } from 'electron';
 
 import { APP_DISPLAY_NAME, APP_USER_MODEL_ID } from './app-identity.mjs';
+import {
+  DesktopSession,
+  StaleDesktopOperationError,
+} from './desktop-session.mjs';
 import {
   activateDshRelease,
   chooseDshReleaseForStartup,
@@ -32,6 +38,9 @@ import {
   redactSecrets,
 } from './runtime-contract.mjs';
 import { SafeLog } from './safe-log.mjs';
+import { ShellView } from './shell-view.mjs';
+import { WindowSurface } from './window-surface.mjs';
+import { protectWebContents } from './web-contents-guard.mjs';
 import {
   inspectDshPort,
   terminateDshProcessTree,
@@ -42,6 +51,7 @@ const fileDirectory = path.dirname(fileURLToPath(import.meta.url));
 const desktopRoot = path.resolve(fileDirectory, '..');
 const repoRoot = path.resolve(desktopRoot, '..');
 const statusPage = path.join(fileDirectory, 'status', 'index.html');
+const statusPreload = path.join(fileDirectory, 'status', 'preload.cjs');
 const updateDialogPage = path.join(
   fileDirectory,
   'update-dialog',
@@ -58,22 +68,30 @@ const DSH_PORT = 3080;
 const TOOLBAR_HEIGHT = 44;
 
 let allowedDshOrigin;
-let busy = false;
 let cleanupStarted = false;
+let currentDshOrigin;
+const desktopSession = new DesktopSession();
+let dshPageGeneration = 0;
+let dshPageReady = false;
 let dshView;
-let dshViewAttached = false;
+let log;
 let mainWindow;
 let npmCommand;
+let pendingReleaseCommit;
 let powershellCommand;
 let releaseStore;
 let runtime;
 let selectedVersion;
 let selectedVersionCommitted = false;
+let shellErrorKind = 'startup';
 let shellMessage = '';
+let shellRecoveryAction = 'retry-start';
+let shellRecoveryPromise;
+let shellRecovering = false;
 let shellState = 'starting';
-let restartActivity;
+let shellView;
+let surface;
 let tray;
-let updateActivity;
 
 app.setAppUserModelId(APP_USER_MODEL_ID);
 app.setName(APP_DISPLAY_NAME);
@@ -85,6 +103,19 @@ if (!hasSingleInstanceLock) {
 function safeMessage(error) {
   return redactSecrets(error instanceof Error ? error.message : String(error))
     .slice(0, 800);
+}
+
+function launchAction(action, { background = false } = {}) {
+  void Promise.resolve()
+    .then(action)
+    .catch((error) => {
+      if (cleanupStarted) return;
+      if (background) {
+        log?.write('desktop', `后台恢复失败：${safeMessage(error)}`);
+        return;
+      }
+      dialog.showErrorBox('DSH Desktop 操作失败', safeMessage(error));
+    });
 }
 
 function showMainWindow() {
@@ -123,16 +154,16 @@ function updateTrayMenu() {
     { type: 'separator' },
     {
       label: '重启 DSH',
-      enabled: !busy && Boolean(selectedVersion),
+      enabled: !desktopSession.busy && Boolean(selectedVersion),
       click: () => {
-        void restartDsh();
+        launchAction(restartDsh);
       },
     },
     {
       label: '检查 DSH 更新…',
-      enabled: !busy && selectedVersionCommitted,
+      enabled: !desktopSession.busy && selectedVersionCommitted,
       click: () => {
-        void checkForDshUpdate();
+        launchAction(checkForDshUpdate);
       },
     },
     { type: 'separator' },
@@ -143,60 +174,62 @@ function updateTrayMenu() {
   ]));
 }
 
-function layoutDshView() {
-  if (!dshViewAttached || !mainWindow || mainWindow.isDestroyed()) return;
-  const { width, height } = mainWindow.getContentBounds();
-  dshView.setBounds({
-    x: 0,
-    y: TOOLBAR_HEIGHT,
-    width,
-    height: Math.max(0, height - TOOLBAR_HEIGHT),
-  });
-}
-
-function hideDshView() {
-  if (!dshViewAttached || !mainWindow || mainWindow.isDestroyed()) return;
-  mainWindow.contentView.removeChildView(dshView);
-  dshViewAttached = false;
-}
-
-function attachDshView() {
-  if (!dshViewAttached) {
-    mainWindow.contentView.addChildView(dshView);
-    dshViewAttached = true;
-  }
-  layoutDshView();
-}
-
-async function loadShell(state, message) {
+async function loadShell(state, message, {
+  errorKind = shellErrorKind,
+  recoveryAction = shellRecoveryAction,
+} = {}) {
   if (cleanupStarted || !mainWindow || mainWindow.isDestroyed()) return;
   shellState = state;
+  shellErrorKind = errorKind;
   shellMessage = message;
-  await mainWindow.loadFile(statusPage, {
-    query: {
-      state,
-      message: safeMessage(message),
-      version: selectedVersion || '',
-      canRestart: String(!busy && Boolean(selectedVersion)),
-      canCheckUpdates: String(!busy && selectedVersionCommitted),
-      restartActivity: restartActivity || '',
-      updateActivity: updateActivity || '',
-    },
+  shellRecoveryAction = recoveryAction;
+  if (shellRecoveryPromise) await shellRecoveryPromise;
+  await shellView.render({
+    state,
+    errorKind,
+    message: safeMessage(message),
+    recoveryAction,
+    version: selectedVersion || '',
+    canRestart: !desktopSession.busy && Boolean(selectedVersion),
+    canCheckUpdates: (
+      !desktopSession.busy && selectedVersionCommitted
+    ),
+    restartActivity: desktopSession.restartActivity || '',
+    updateActivity: desktopSession.updateActivity || '',
   });
 }
 
-async function showStatus(state, message) {
+async function showStatus(state, message, {
+  errorKind = 'startup',
+  recoveryAction = 'retry-start',
+  reveal = true,
+} = {}) {
   if (cleanupStarted || !mainWindow || mainWindow.isDestroyed()) return;
   allowedDshOrigin = undefined;
-  hideDshView();
-  await loadShell(state, message);
-  showMainWindow();
+  await loadShell(state, message, { errorKind, recoveryAction });
+  surface.showStatus();
+  if (reveal) showMainWindow();
 }
 
-async function showDshPage() {
+async function showDshPage({ reveal = true } = {}) {
   await loadShell('ready', '');
-  attachDshView();
-  showMainWindow();
+  surface.showDsh();
+  if (reveal) showMainWindow();
+}
+
+async function finishDesktopOperation(operation) {
+  const completed = desktopSession.completeOperation(operation);
+  updateTrayMenu();
+  if (completed && !cleanupStarted) {
+    await loadShell(shellState, shellMessage);
+  }
+  return completed;
+}
+
+function runtimeRecoveryAction() {
+  return desktopSession.runtimeStatus === 'running'
+    ? 'reload-page'
+    : 'restart-runtime';
 }
 
 async function showUpdateDialog({
@@ -294,11 +327,13 @@ async function openExternal(candidate) {
 function handleDesktopAction(candidate) {
   const action = new URL(candidate).hostname;
   if (action === 'retry') {
-    void startWithPreflight();
+    launchAction(startWithPreflight);
+  } else if (action === 'reload-page') {
+    launchAction(reloadDshPage);
   } else if (action === 'restart') {
-    void restartDsh();
+    launchAction(restartDsh);
   } else if (action === 'check-update') {
-    void checkForDshUpdate();
+    launchAction(checkForDshUpdate);
   } else if (action === 'copy-diagnostics') {
     clipboard.writeText([
       `DSH Desktop ${app.getVersion()}`,
@@ -312,67 +347,60 @@ function handleDesktopAction(candidate) {
   }
 }
 
-function protectWebContents(contents, { allowDesktopActions = false } = {}) {
-  contents.setWindowOpenHandler(({ url }) => {
-    void openExternal(url);
-    return { action: 'deny' };
-  });
-  contents.on('will-attach-webview', (event) => {
-    event.preventDefault();
-  });
-
-  const handleMainFrameNavigation = (event, candidate) => {
-    const current = contents.getURL();
-    if (
-      allowDesktopActions
-      && current.startsWith('file:')
-      && candidate.startsWith('dsh-desktop://')
-    ) {
-      event.preventDefault();
-      handleDesktopAction(candidate);
-      return;
-    }
-    if (
-      allowedDshOrigin
-      && isAllowedDshNavigation(candidate, allowedDshOrigin)
-    ) {
-      return;
-    }
-    event.preventDefault();
-    void openExternal(candidate);
-  };
-
-  contents.on('will-navigate', (details) => {
-    handleMainFrameNavigation(details, details.url);
-  });
-  contents.on('will-redirect', (details) => {
-    if (details.isMainFrame) {
-      handleMainFrameNavigation(details, details.url);
-    } else if (
-      !allowedDshOrigin
-      || !isAllowedDshNavigation(details.url, allowedDshOrigin)
-    ) {
-      details.preventDefault();
-    }
-  });
-  contents.on('will-frame-navigate', (details) => {
-    if (
-      !details.isMainFrame
-      && (
-        !allowedDshOrigin
-        || !isAllowedDshNavigation(details.url, allowedDshOrigin)
-      )
-    ) {
-      details.preventDefault();
-    }
-  });
-  contents.on('render-process-gone', (_event, details) => {
-    if (cleanupStarted) return;
-    void showStatus(
-      'error',
-      `页面进程异常退出（${details.reason}）。DSH 进程仍由 App 管理。`,
+function handleShellRendererGone(details) {
+  if (cleanupStarted || !mainWindow || mainWindow.isDestroyed()) return;
+  shellView.rendererGone();
+  if (shellRecovering) {
+    log?.write(
+      'desktop',
+      `工具栏页面连续异常退出（${details.reason}）`,
     );
-  });
+    tray?.setToolTip('DSH Desktop（工具栏异常）');
+    return;
+  }
+  shellRecovering = true;
+  const recovery = shellView.recover();
+  shellRecoveryPromise = recovery;
+  launchAction(async () => {
+    try {
+      await recovery;
+    } finally {
+      shellRecovering = false;
+      if (shellRecoveryPromise === recovery) {
+        shellRecoveryPromise = undefined;
+      }
+    }
+  }, { background: true });
+}
+
+function handleDshRendererGone(details) {
+  if (cleanupStarted) return;
+  dshPageGeneration += 1;
+  dshPageReady = false;
+  if ([
+    'reloading',
+    'restarting',
+    'starting',
+    'upgrading',
+  ].includes(desktopSession.operationKind)) {
+    return;
+  }
+  const backendRunning = desktopSession.runtimeStatus === 'running';
+  desktopSession.cancelCurrentOperation();
+  updateTrayMenu();
+  launchAction(() => showStatus(
+    'error',
+    backendRunning
+      ? `DSH 页面进程异常退出（${details.reason}）。DSH 后端仍在运行。`
+      : `DSH 页面进程异常退出（${details.reason}）。`,
+    {
+      errorKind: backendRunning ? 'page' : 'runtime',
+      recoveryAction: backendRunning
+        ? 'reload-page'
+        : 'restart-runtime',
+      reveal: false,
+    },
+  ), { background: true });
 }
 
 function createMainWindow() {
@@ -388,12 +416,20 @@ function createMainWindow() {
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
+      preload: statusPreload,
       sandbox: true,
       webSecurity: true,
     },
   });
   protectWebContents(window.webContents, {
-    allowDesktopActions: true,
+    getExpectedOrigin: () => allowedDshOrigin,
+    onDesktopAction: handleDesktopAction,
+    onExternalError: (error) => {
+      log?.write('desktop', `无法打开外部链接：${safeMessage(error)}`);
+    },
+    onRendererGone: handleShellRendererGone,
+    openExternal,
+    role: 'shell',
   });
   dshView = new WebContentsView({
     webPreferences: {
@@ -403,14 +439,49 @@ function createMainWindow() {
       webSecurity: true,
     },
   });
-  protectWebContents(dshView.webContents);
-  window.on('resize', layoutDshView);
+  protectWebContents(dshView.webContents, {
+    getExpectedOrigin: () => allowedDshOrigin,
+    onDesktopAction: handleDesktopAction,
+    onExternalError: (error) => {
+      log?.write('desktop', `无法打开外部链接：${safeMessage(error)}`);
+    },
+    onRendererGone: handleDshRendererGone,
+    openExternal,
+    role: 'dsh',
+  });
+  shellView = new ShellView({
+    ipcMain,
+    statusPage,
+    window,
+  });
+  surface = new WindowSurface({
+    mainWindow: window,
+    onError: (error) => {
+      if (cleanupStarted) return;
+      launchAction(() => showStatus(
+        'error',
+        `无法恢复 DSH 页面布局：${safeMessage(error)}`,
+        {
+          errorKind: 'surface',
+          recoveryAction: desktopSession.runtimeRunId
+            ? runtimeRecoveryAction()
+            : 'restart-runtime',
+          reveal: false,
+        },
+      ), { background: true });
+    },
+    screen,
+    toolbarHeight: TOOLBAR_HEIGHT,
+    view: dshView,
+  });
   window.on('close', (event) => {
     if (cleanupStarted) return;
     event.preventDefault();
     requestExit();
   });
   window.on('closed', () => {
+    shellView.dispose();
+    surface.dispose();
     dshView?.webContents.close();
   });
   return window;
@@ -423,9 +494,68 @@ function createTray() {
   updateTrayMenu();
 }
 
-async function stopDsh() {
-  await runtime.stop();
+async function stopDsh(operation) {
+  desktopSession.checkpoint(operation);
+  const runId = desktopSession.runtimeRunId ?? runtime.currentRunId;
+  if (runId !== undefined) {
+    await runtime.stop(runId);
+    desktopSession.recordRuntimeExit(runId);
+  }
+  currentDshOrigin = undefined;
+  dshPageGeneration += 1;
+  dshPageReady = false;
   await waitForPortFree(DSH_PORT);
+  desktopSession.checkpoint(operation);
+}
+
+async function startDsh(operation, version) {
+  desktopSession.checkpoint(operation);
+  const starting = runtime.start(version);
+  const runId = runtime.currentRunId;
+  desktopSession.setRuntime(operation, runId, 'starting');
+  try {
+    const result = await starting;
+    desktopSession.checkpoint(operation);
+    if (result.runId !== runId) {
+      throw new Error('DSH 启动实例发生变化');
+    }
+    desktopSession.setRuntime(operation, runId, 'running');
+    return result.url;
+  } catch (error) {
+    desktopSession.recordRuntimeExit(runId);
+    throw error;
+  }
+}
+
+function currentRunId(operation) {
+  desktopSession.checkpoint(operation);
+  const runId = desktopSession.runtimeRunId;
+  if (runId === undefined || !desktopSession.isCurrentRuntime(runId)) {
+    throw new Error('DSH 进程已退出');
+  }
+  return runId;
+}
+
+async function loadDsh(operation, url) {
+  const runId = currentRunId(operation);
+  const pageGeneration = ++dshPageGeneration;
+  dshPageReady = false;
+  currentDshOrigin = new URL(url).origin;
+  allowedDshOrigin = currentDshOrigin;
+  await dshView.webContents.loadURL(url);
+  desktopSession.checkpoint(operation);
+  if (pageGeneration !== dshPageGeneration) {
+    throw new Error('DSH 页面加载实例发生变化');
+  }
+  if (!desktopSession.isCurrentRuntime(runId)) {
+    throw new Error('DSH 在页面加载期间退出');
+  }
+  dshPageReady = true;
+}
+
+function requireDshPage(operation) {
+  currentRunId(operation);
+  if (!dshPageReady) throw new Error('DSH 页面尚未就绪');
 }
 
 async function latestDshVersion() {
@@ -435,44 +565,111 @@ async function latestDshVersion() {
   });
 }
 
-async function restartDsh() {
-  if (busy || cleanupStarted || !selectedVersion) return;
-  restartActivity = 'restarting';
-  await runSelectedDsh('正在重启 DSH…');
+async function writeSelectedRelease(version) {
+  const writing = releaseStore.write(version);
+  pendingReleaseCommit = writing;
+  try {
+    await writing;
+  } finally {
+    if (pendingReleaseCommit === writing) {
+      pendingReleaseCommit = undefined;
+    }
+  }
 }
 
-async function runSelectedDsh(statusMessage) {
-  if (busy || cleanupStarted) return;
+async function restartDsh() {
+  if (cleanupStarted || !selectedVersion) return;
+  await runSelectedDsh('正在重启 DSH…', 'restarting');
+}
+
+async function reloadDshPage() {
+  if (cleanupStarted) return;
+  const operation = desktopSession.beginOperation('reloading');
+  if (!operation) return;
+  updateTrayMenu();
+  try {
+    const runId = currentRunId(operation);
+    const url = dshView.webContents.getURL();
+    if (!isAllowedDshNavigation(url, currentDshOrigin)) {
+      throw new Error('DSH 页面没有可重新加载的安全地址');
+    }
+    await showStatus('starting', '正在重新加载 DSH 页面…');
+    await loadDsh(operation, url);
+    if (!desktopSession.isCurrentRuntime(runId)) {
+      throw new Error('DSH 在页面重新加载期间退出');
+    }
+    await showDshPage();
+    requireDshPage(operation);
+  } catch (error) {
+    if (
+      !(error instanceof StaleDesktopOperationError)
+      && desktopSession.isCurrent(operation)
+    ) {
+      await showStatus(
+        'error',
+        safeMessage(error),
+        {
+          errorKind: runtimeRecoveryAction() === 'reload-page'
+            ? 'page'
+            : 'runtime',
+          recoveryAction: runtimeRecoveryAction(),
+          reveal: false,
+        },
+      );
+    }
+  } finally {
+    await finishDesktopOperation(operation);
+  }
+}
+
+async function runSelectedDsh(statusMessage, kind = 'starting') {
+  if (cleanupStarted) return;
   if (!selectedVersion) {
     await showStatus('error', '尚未选择 DSH 版本。');
     return;
   }
-  busy = true;
+  const operation = desktopSession.beginOperation(kind);
+  if (!operation) return;
   updateTrayMenu();
-  await showStatus('starting', statusMessage);
   try {
+    await showStatus('starting', statusMessage);
+    desktopSession.checkpoint(operation);
     await activateDshRelease({
       targetVersion: selectedVersion,
-      stop: stopDsh,
-      start: (version) => runtime.start(version),
-      load: async (url) => {
-        allowedDshOrigin = new URL(url).origin;
-        await dshView.webContents.loadURL(url);
-      },
+      stop: () => stopDsh(operation),
+      start: (version) => startDsh(operation, version),
+      load: (url) => loadDsh(operation, url),
       commit: async (version) => {
         if (selectedVersionCommitted) return;
-        await releaseStore.write(version);
+        requireDshPage(operation);
+        await writeSelectedRelease(version);
         selectedVersionCommitted = true;
+        desktopSession.checkpoint(operation);
       },
+      validate: () => requireDshPage(operation),
     });
+    requireDshPage(operation);
     await showDshPage();
+    requireDshPage(operation);
   } catch (error) {
-    await showStatus('error', safeMessage(error));
+    if (
+      !(error instanceof StaleDesktopOperationError)
+      && desktopSession.isCurrent(operation)
+    ) {
+      await showStatus(
+        'error',
+        safeMessage(error),
+        {
+          errorKind: kind === 'starting'
+            ? 'startup'
+            : 'runtime',
+          recoveryAction: runtimeRecoveryAction(),
+          reveal: false,
+        },
+      );
+    }
   } finally {
-    restartActivity = undefined;
-    busy = false;
-    updateTrayMenu();
-    if (dshViewAttached) await loadShell('ready', '');
+    await finishDesktopOperation(operation);
   }
 }
 
@@ -509,15 +706,20 @@ async function chooseInitialDshVersion() {
 }
 
 async function checkForDshUpdate() {
-  if (busy || cleanupStarted || !selectedVersionCommitted) return;
-  busy = true;
-  updateActivity = 'checking';
+  if (cleanupStarted || !selectedVersionCommitted) return;
+  const operation = desktopSession.beginOperation('checking');
+  if (!operation) return;
   updateTrayMenu();
-  await loadShell(shellState, shellMessage);
   let switching = false;
   try {
+    await loadShell(shellState, shellMessage);
+    desktopSession.checkpoint(operation);
     const latestVersion = await latestDshVersion();
-    updateActivity = undefined;
+    desktopSession.checkpoint(operation);
+    desktopSession.transitionOperation(
+      operation,
+      'awaiting-confirmation',
+    );
     await loadShell(shellState, shellMessage);
     if (!isNewerDshVersion(latestVersion, selectedVersion)) {
       await showUpdateDialog({
@@ -526,6 +728,7 @@ async function checkForDshUpdate() {
         message: `当前已是最新版本：${selectedVersion}`,
         primary: '确定',
       });
+      desktopSession.checkpoint(operation);
       return;
     }
 
@@ -544,10 +747,11 @@ async function checkForDshUpdate() {
       secondary: '暂不升级',
       initialFocus: 'secondary',
     });
+    desktopSession.checkpoint(operation);
     if (confirmation !== 'primary') return;
 
     switching = true;
-    updateActivity = 'upgrading';
+    desktopSession.transitionOperation(operation, 'upgrading');
     const previousVersion = selectedVersion;
     await showStatus(
       'starting',
@@ -556,17 +760,25 @@ async function checkForDshUpdate() {
     const result = await activateDshRelease({
       targetVersion: latestVersion,
       previousVersion,
-      stop: stopDsh,
-      start: (version) => runtime.start(version),
-      load: async (url) => {
-        allowedDshOrigin = new URL(url).origin;
-        await dshView.webContents.loadURL(url);
+      stop: () => stopDsh(operation),
+      start: (version) => startDsh(operation, version),
+      load: (url) => loadDsh(operation, url),
+      commit: async (version) => {
+        requireDshPage(operation);
+        await writeSelectedRelease(version);
+        selectedVersion = version;
+        selectedVersionCommitted = true;
       },
-      commit: (version) => releaseStore.write(version),
+      validate: () => requireDshPage(operation),
     });
+    requireDshPage(operation);
     if (result.status === 'rolled-back') {
-      updateActivity = undefined;
+      desktopSession.transitionOperation(
+        operation,
+        'awaiting-confirmation',
+      );
       await showDshPage();
+      requireDshPage(operation);
       await showUpdateDialog({
         kind: 'error',
         title: 'DSH 升级失败',
@@ -574,23 +786,39 @@ async function checkForDshUpdate() {
         detail: safeMessage(result.error),
         primary: '确定',
       });
+      desktopSession.checkpoint(operation);
       return;
     }
-    selectedVersion = latestVersion;
-    selectedVersionCommitted = true;
-    updateActivity = undefined;
+    desktopSession.transitionOperation(
+      operation,
+      'awaiting-confirmation',
+    );
     await showDshPage();
+    requireDshPage(operation);
     await showUpdateDialog({
       kind: 'info',
       title: 'DSH 升级完成',
       message: `当前版本：${latestVersion}`,
       primary: '确定',
     });
+    desktopSession.checkpoint(operation);
   } catch (error) {
-    updateActivity = undefined;
-    if (switching) {
-      await showStatus('error', safeMessage(error));
-    } else {
+    if (error instanceof StaleDesktopOperationError) {
+      return;
+    }
+    if (switching && desktopSession.isCurrent(operation)) {
+      await showStatus(
+        'error',
+        safeMessage(error),
+        {
+          errorKind: runtimeRecoveryAction() === 'reload-page'
+            ? 'page'
+            : 'runtime',
+          recoveryAction: runtimeRecoveryAction(),
+          reveal: false,
+        },
+      );
+    } else if (desktopSession.isCurrent(operation)) {
       await loadShell(shellState, shellMessage);
       await showUpdateDialog({
         kind: 'error',
@@ -600,27 +828,28 @@ async function checkForDshUpdate() {
       });
     }
   } finally {
-    updateActivity = undefined;
-    busy = false;
-    updateTrayMenu();
-    if (dshViewAttached) await loadShell('ready', '');
+    await finishDesktopOperation(operation);
   }
 }
 
 async function startWithPreflight() {
-  if (busy || cleanupStarted) return;
-  busy = true;
+  if (cleanupStarted) return;
+  const operation = desktopSession.beginOperation('starting');
+  if (!operation) return;
   updateTrayMenu();
+  let shouldStart = false;
   try {
     if (!await chooseInitialDshVersion()) {
       requestExit();
       return;
     }
+    desktopSession.checkpoint(operation);
     await showStatus(
       'starting',
       `正在检查本机 DSH ${selectedVersion}…`,
     );
     const inspection = await inspectDshPort(DSH_PORT);
+    desktopSession.checkpoint(operation);
     if (inspection.kind === 'unknown') {
       throw new Error(
         `127.0.0.1:${DSH_PORT} 已被未知进程占用（PID ${inspection.listenerPid}）。`
@@ -645,22 +874,33 @@ async function startWithPreflight() {
         cancelId: 1,
         noLink: true,
       });
+      desktopSession.checkpoint(operation);
       if (result.response !== 0) {
         requestExit();
         return;
       }
       await terminateDshProcessTree(inspection);
       await waitForPortFree(DSH_PORT);
+      desktopSession.checkpoint(operation);
     }
+    shouldStart = true;
   } catch (error) {
-    await showStatus('error', safeMessage(error));
-    busy = false;
-    updateTrayMenu();
-    return;
+    if (
+      !(error instanceof StaleDesktopOperationError)
+      && desktopSession.isCurrent(operation)
+    ) {
+      await showStatus(
+        'error',
+        safeMessage(error),
+        { reveal: false },
+      );
+    }
+  } finally {
+    await finishDesktopOperation(operation);
   }
-  busy = false;
-  updateTrayMenu();
-  await runSelectedDsh(`正在启动 DSH ${selectedVersion}…`);
+  if (shouldStart && !cleanupStarted) {
+    await runSelectedDsh(`正在启动 DSH ${selectedVersion}…`);
+  }
 }
 
 function requestExit() {
@@ -687,7 +927,7 @@ async function initialize() {
   });
   Menu.setApplicationMenu(null);
 
-  const log = new SafeLog(
+  log = new SafeLog(
     path.join(app.getPath('userData'), 'logs'),
   );
   await log.initialize();
@@ -708,13 +948,29 @@ async function initialize() {
     repoRoot,
     supervisorPath,
   });
-  runtime.on('unexpected-exit', ({ code, signal }) => {
-    if (busy || cleanupStarted) return;
+  runtime.on('unexpected-exit', ({ code, runId, signal }) => {
+    if (
+      cleanupStarted
+      || !desktopSession.recordRuntimeExit(runId)
+    ) {
+      return;
+    }
+    if (desktopSession.operationKind === 'upgrading') return;
+    currentDshOrigin = undefined;
+    dshPageGeneration += 1;
+    dshPageReady = false;
+    desktopSession.cancelCurrentOperation();
+    updateTrayMenu();
     const reason = signal ? `signal ${signal}` : `exit code ${code}`;
-    void showStatus(
+    launchAction(() => showStatus(
       'error',
       `DSH ${selectedVersion || ''} 意外退出（${reason}）。`,
-    );
+      {
+        errorKind: 'runtime',
+        recoveryAction: 'restart-runtime',
+        reveal: false,
+      },
+    ), { background: true });
   });
 
   mainWindow = createMainWindow();
@@ -729,16 +985,25 @@ if (hasSingleInstanceLock) {
     if (cleanupStarted) return;
     event.preventDefault();
     cleanupStarted = true;
-    busy = true;
+    desktopSession.close();
     updateTrayMenu();
-    void Promise.resolve(runtime?.stop()).finally(() => {
+    void Promise.allSettled([
+      runtime?.close(),
+      pendingReleaseCommit,
+    ]).finally(() => {
       tray?.destroy();
       app.exit(0);
     });
   });
   void app.whenReady().then(initialize).catch(async (error) => {
     cleanupStarted = true;
-    await runtime?.stop();
+    desktopSession.close();
+    await runtime?.close().catch((cleanupError) => {
+      log?.write(
+        'desktop',
+        `启动失败后的进程清理失败：${safeMessage(cleanupError)}`,
+      );
+    });
     dialog.showErrorBox('DSH Desktop 启动失败', safeMessage(error));
     app.exit(1);
   });

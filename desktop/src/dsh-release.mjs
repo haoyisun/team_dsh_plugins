@@ -205,6 +205,7 @@ export async function activateDshRelease({
   start,
   load,
   commit,
+  validate = async () => {},
 }) {
   const target = requireExactDshVersion(targetVersion);
   const previous = previousVersion === undefined
@@ -212,10 +213,13 @@ export async function activateDshRelease({
     : requireExactDshVersion(previousVersion);
 
   await stop();
+  let committed = false;
   try {
     const url = await start(target);
     await load(url);
     await commit(target);
+    committed = true;
+    await validate(target);
     return { status: 'activated', version: target };
   } catch (updateError) {
     await stop().catch(() => {});
@@ -223,6 +227,7 @@ export async function activateDshRelease({
     try {
       const previousUrl = await start(previous);
       await load(previousUrl);
+      if (committed) await commit(previous);
       return {
         status: 'rolled-back',
         version: previous,
