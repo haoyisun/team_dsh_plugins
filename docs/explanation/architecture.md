@@ -30,7 +30,7 @@ MCP Server 连接由工作区插件 `@team-dsh-plugins/mcp-manager` 管理。插
 
 ## Windows 桌面壳
 
-`desktop/` 是独立 pnpm 安装边界，不属于根 workspace。它调用 npm CLI 启动官方 DSH Web，并在收到 `127.0.0.1` token URL 后由隔离的 `WebContentsView` 加载。BrowserWindow 的本地页面只提供版本工具栏和启动/错误状态，不向 DSH DOM 注入控件；DSH 页面、设置、会话和插件仍由 DSH 自身拥有。
+`desktop/` 是独立 pnpm 安装边界，不属于根 workspace。它调用 npm CLI 启动官方 DSH Web，并在收到 `127.0.0.1` token URL 后由隔离的 `WebContentsView` 加载。BrowserWindow 的本地页面只提供版本工具栏（含“重启 DSH”与“检查更新”）和启动/错误状态，不向 DSH DOM 注入控件；DSH 页面、设置、会话和插件仍由 DSH 自身拥有。
 
 桌面壳只管理自己启动的进程。启动前若 `127.0.0.1:3080` 已被占用，它结合监听 PID 和祖先进程命令行识别 DSH；只有用户确认后才终止已识别的 DSH，未知进程只报告冲突。Windows supervisor 使用 Job Object 绑定 DSH 进程树，确保 App 正常退出或主进程消失后清理子进程。
 

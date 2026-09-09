@@ -13,10 +13,16 @@
   <body>
     <header class="toolbar">
       <span id="dsh-version" class="version">DSH 版本未选择</span>
-      <button id="check-update" type="button" disabled>
-        <span id="update-spinner" class="spinner" aria-hidden="true" hidden></span>
-        <span id="update-label">检查更新</span>
-      </button>
+      <div class="toolbar-actions" role="group" aria-label="DSH Desktop 操作">
+        <button id="restart-dsh" type="button" disabled>
+          <span id="restart-spinner" class="spinner" aria-hidden="true" hidden></span>
+          <span id="restart-label">重启 DSH</span>
+        </button>
+        <button id="check-update" type="button" disabled>
+          <span id="update-spinner" class="spinner" aria-hidden="true" hidden></span>
+          <span id="update-label">检查更新</span>
+        </button>
+      </div>
     </header>
     <main class="status" aria-live="polite">
       <div class="mark" aria-hidden="true">D</div>

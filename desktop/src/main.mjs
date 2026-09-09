@@ -70,6 +70,7 @@ let selectedVersion;
 let selectedVersionCommitted = false;
 let shellMessage = '';
 let shellState = 'starting';
+let restartActivity;
 let tray;
 let updateActivity;
 
@@ -122,7 +123,7 @@ function updateTrayMenu() {
       label: '重启 DSH',
       enabled: !busy && Boolean(selectedVersion),
       click: () => {
-        void runSelectedDsh('正在重启 DSH…');
+        void restartDsh();
       },
     },
     {
@@ -174,7 +175,9 @@ async function loadShell(state, message) {
       state,
       message: safeMessage(message),
       version: selectedVersion || '',
+      canRestart: String(!busy && Boolean(selectedVersion)),
       canCheckUpdates: String(!busy && selectedVersionCommitted),
+      restartActivity: restartActivity || '',
       updateActivity: updateActivity || '',
     },
   });
@@ -290,6 +293,8 @@ function handleDesktopAction(candidate) {
   const action = new URL(candidate).hostname;
   if (action === 'retry') {
     void startWithPreflight();
+  } else if (action === 'restart') {
+    void restartDsh();
   } else if (action === 'check-update') {
     void checkForDshUpdate();
   } else if (action === 'copy-diagnostics') {
@@ -428,6 +433,12 @@ async function latestDshVersion() {
   });
 }
 
+async function restartDsh() {
+  if (busy || cleanupStarted || !selectedVersion) return;
+  restartActivity = 'restarting';
+  await runSelectedDsh('正在重启 DSH…');
+}
+
 async function runSelectedDsh(statusMessage) {
   if (busy || cleanupStarted) return;
   if (!selectedVersion) {
@@ -456,6 +467,7 @@ async function runSelectedDsh(statusMessage) {
   } catch (error) {
     await showStatus('error', safeMessage(error));
   } finally {
+    restartActivity = undefined;
     busy = false;
     updateTrayMenu();
     if (dshViewAttached) await loadShell('ready', '');

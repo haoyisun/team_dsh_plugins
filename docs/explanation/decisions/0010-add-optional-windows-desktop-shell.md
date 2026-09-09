@@ -2,7 +2,7 @@
 
 ## 状态
 
-Accepted（DSH 版本更新策略由 ADR-013 取代，窗口组合由 ADR-014 补充）
+Accepted（DSH 版本更新策略由 ADR-013 取代，窗口组合由 ADR-014 补充，工具栏重启 DSH 由 ADR-015 补充）
 
 ## 日期
 

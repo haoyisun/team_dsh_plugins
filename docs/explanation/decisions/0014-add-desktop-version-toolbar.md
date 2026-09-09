@@ -2,7 +2,7 @@
 
 ## 状态
 
-Accepted
+Accepted（工具栏增加“重启 DSH”由 ADR-015 补充）
 
 ## 日期
 

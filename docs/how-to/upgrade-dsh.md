@@ -6,7 +6,7 @@
 npx @deepseek-ai/dsh web
 ```
 
-使用可选 Windows 桌面壳时，首次启动会要求确认并固定一个精确 DSH 版本。以后普通启动和托盘“重启 DSH”都继续运行该版本，不查询 npm `latest`。
+使用可选 Windows 桌面壳时，首次启动会要求确认并固定一个精确 DSH 版本。以后普通启动以及工具栏或托盘中的“重启 DSH”都继续运行该版本，不查询 npm `latest`。
 
 需要升级时：
 

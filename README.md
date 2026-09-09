@@ -37,7 +37,7 @@ MCP Server 连接在 DSH 设置的“MCP 管理”页面维护。可以粘贴常
 
 ## 可选 Windows 桌面壳
 
-Windows 用户可以选择使用 [`desktop/`](desktop) 提供的 Electron 壳管理 DSH Web 进程。窗口直接加载完整 DSH Web，支持桌面快捷方式、单实例、托盘、重启、更新以及随 App 退出清理进程树。
+Windows 用户可以选择使用 [`desktop/`](desktop) 提供的 Electron 壳管理 DSH Web 进程。窗口直接加载完整 DSH Web，支持桌面快捷方式、单实例、托盘、重启 DSH、更新以及随 App 退出清理进程树。
 
 桌面壳目前只支持 Windows，独立于根 pnpm workspace 安装，也不取代官方启动命令。安装和更新步骤见[使用 Windows 桌面壳](docs/how-to/use-windows-desktop.md)。
 

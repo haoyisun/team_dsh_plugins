@@ -60,6 +60,7 @@ app.whenReady().then(async () => {
         state: 'error',
         message: 'smoke-test-message',
         version: '1.2.3',
+        canRestart: 'true',
         canCheckUpdates: 'true',
       },
     },
@@ -70,7 +71,36 @@ app.whenReady().then(async () => {
     actionsHidden: document.querySelector('#actions')?.hidden,
     progressHidden: document.querySelector('#progress')?.hidden,
     version: document.querySelector('#dsh-version')?.textContent,
-    updateDisabled: document.querySelector('#check-update')?.disabled
+    restartLabel: document.querySelector('#restart-label')?.textContent,
+    restartDisabled: document.querySelector('#restart-dsh')?.disabled,
+    updateDisabled: document.querySelector('#check-update')?.disabled,
+    restartTag: document.querySelector('#restart-dsh')?.tagName,
+    updateTag: document.querySelector('#check-update')?.tagName,
+    restartClass: document.querySelector('#restart-dsh')?.className,
+    updateClass: document.querySelector('#check-update')?.className,
+    buttonStyles: (() => {
+      const keys = [
+        'minHeight',
+        'paddingTop',
+        'paddingRight',
+        'paddingBottom',
+        'paddingLeft',
+        'borderTopWidth',
+        'borderRadius',
+        'fontSize',
+        'fontFamily',
+        'backgroundColor',
+        'color',
+      ];
+      const read = (selector) => {
+        const style = getComputedStyle(document.querySelector(selector));
+        return Object.fromEntries(keys.map((key) => [key, style[key]]));
+      };
+      return {
+        restart: read('#restart-dsh'),
+        update: read('#check-update'),
+      };
+    })()
   })`);
   if (
     page.title !== 'DSH 未能启动'
@@ -78,10 +108,28 @@ app.whenReady().then(async () => {
     || page.actionsHidden !== false
     || page.progressHidden !== true
     || page.version !== 'DSH 1.2.3'
+    || page.restartLabel !== '重启 DSH'
+    || page.restartDisabled !== false
     || page.updateDisabled !== false
+    || page.restartTag !== 'BUTTON'
+    || page.updateTag !== 'BUTTON'
+    || page.restartClass !== page.updateClass
   ) {
     throw new Error(`状态页渲染结果异常：${JSON.stringify(page)}`);
   }
+  assert.deepEqual(page.buttonStyles.restart, page.buttonStyles.update);
+
+  const restartNavigation = nextNavigation(
+    window.webContents,
+    'will-navigate',
+  );
+  await window.webContents.executeJavaScript(
+    'document.querySelector("#restart-dsh").click()',
+  );
+  assert.equal(
+    (await restartNavigation).url,
+    'dsh-desktop://restart',
+  );
 
   const updateNavigation = nextNavigation(
     window.webContents,
@@ -115,6 +163,36 @@ app.whenReady().then(async () => {
     buttonText: '检查中…',
     buttonBusy: 'true',
     spinnerHidden: false,
+  });
+
+  await window.loadFile(
+    path.join(desktopRoot, 'src', 'status', 'index.html'),
+    {
+      query: {
+        state: 'starting',
+        message: '正在重启 DSH…',
+        version: '1.2.3',
+        canRestart: 'false',
+        canCheckUpdates: 'false',
+        restartActivity: 'restarting',
+      },
+    },
+  );
+  const restarting = await window.webContents.executeJavaScript(`({
+    restartText: document.querySelector('#restart-label')?.textContent.trim(),
+    restartBusy: document.querySelector('#restart-dsh')?.getAttribute('aria-busy'),
+    restartSpinnerHidden: document.querySelector('#restart-spinner')?.hidden,
+    restartDisabled: document.querySelector('#restart-dsh')?.disabled,
+    updateText: document.querySelector('#update-label')?.textContent.trim(),
+    updateBusy: document.querySelector('#check-update')?.getAttribute('aria-busy')
+  })`);
+  assert.deepEqual(restarting, {
+    restartText: '重启中…',
+    restartBusy: 'true',
+    restartSpinnerHidden: false,
+    restartDisabled: true,
+    updateText: '检查更新',
+    updateBusy: null,
   });
 
   await window.loadFile(
