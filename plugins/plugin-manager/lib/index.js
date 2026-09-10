@@ -10,7 +10,7 @@ import { runProcess } from './process.js';
 import { ProfilePluginService } from './service.js';
 
 const name = 'plugin-manager';
-const inject = ['settings', 'connection'];
+const inject = ['settings', 'connection', 'webServer'];
 const Config = Schema.object({});
 const SettingsConfig = Schema.object({
   rollback: Schema.dict(Schema.string()).default({}),

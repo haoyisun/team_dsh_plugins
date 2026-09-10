@@ -29,6 +29,16 @@ pnpm test
 npx @deepseek-ai/dsh web
 ```
 
+## 已知问题：DSH 0.1.5-rc.1 无法加载带 RPC 通道的宿主插件
+
+2026-09-10 在隔离的临时 DSH Home 中实测：`@deepseek-ai/dsh-client-connection@0.1.5-rc.1` 自身的 `inject` 从 `webServer`、`credentials` 变为只保留 `credentials`，但 `HostConnectionService` 注册通道时仍然读取 `owner.webServer`。因此任何调用 `ctx.connection.rpc.handle(...)` 的宿主插件都会在加载期失败：
+
+```
+Error: failed to apply loader entry <plugin>: cannot get property "webServer" without inject
+```
+
+已验证这与调用方无关：在插件模块 `inject`、Profile 条目 `inject` 以及 `ctx.inject(['webServer'], ...)` 子上下文三种写法下都失败，同一份代码在 0.1.2-rc.1 上正常。`@team-dsh-plugins/mcp-manager` 与 `@team-dsh-plugins/plugin-manager` 依赖该 API，因此在官方修复前请继续固定 0.1.2-rc.1，不要升级到 0.1.5-rc.1；升级只会失败并自动回滚。官方修复后应删除本节。
+
 ## 出现插件加载故障
 
 1. 记录 `npx @deepseek-ai/dsh --version`。

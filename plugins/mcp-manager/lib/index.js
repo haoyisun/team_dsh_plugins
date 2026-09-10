@@ -15,7 +15,7 @@ import { McpManagerController } from './controller.js';
 import { ManagedMcpRuntime, validateInstance } from './model.js';
 
 const name = 'mcp-manager';
-const inject = ['settings', 'credentials', 'connection', 'tools'];
+const inject = ['settings', 'credentials', 'connection', 'tools', 'webServer'];
 const Config = Schema.object({});
 const MAX_PROBE_PAGES = 32;
 const MAX_PROBE_TOOLS = 1_000;

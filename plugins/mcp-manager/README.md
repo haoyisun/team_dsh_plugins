@@ -10,6 +10,8 @@
 
 插件只管理连接配置，不安装或升级 MCP Server。配置属于当前用户的 DSH Home，不写入源码仓库。
 
+宿主插件依赖的宿主服务：`settings`、`credentials`、`connection`、`tools`、`webServer`（`/mcp-manager` RPC 通道注册在 `webServer` 上）。
+
 ## 使用
 
 运行仓库接入和检查：

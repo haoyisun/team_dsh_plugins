@@ -14,6 +14,8 @@
 
 系统 Bundle、工作区插件和管理器自身只读。所有 Bundle 增删和版本变化都需要重启 DSH Web 才会生效。
 
+宿主插件依赖的宿主服务：`settings`、`connection`、`webServer`（`/plugin-manager` RPC 通道注册在 `webServer` 上）。
+
 ## 使用
 
 运行 `pnpm run init` 后，以官方命令启动 DSH：

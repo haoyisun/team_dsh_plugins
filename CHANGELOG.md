@@ -32,6 +32,7 @@
 - DSH Desktop 为进程和快捷方式设置同一 AppUserModelID，并用内容哈希图标路径绕过 Explorer 旧缓存，固定或右键任务栏图标时继续使用自定义图标。
 - DSH Desktop 任务栏图标改为标准多尺寸 ICO，避免 Windows 把透明背景画成黑底，从而和 `app-icon.png` 对不上。
 - DSH Desktop 首次安装和升级现在强制刷新 npm 元数据，修复“检查能发现新版本、安装却报 `ETARGET` 并回滚”的问题；普通启动与回滚仍优先使用本机缓存，启动失败时错误信息会带上 npm 的真实输出。
+- `@team-dsh-plugins/mcp-manager` 与 `@team-dsh-plugins/plugin-manager` 按客户端连接契约声明 RPC 通道所需的 `webServer` 宿主服务依赖；受 DSH 0.1.5-rc.1 自身的连接包回归影响，这两个插件在该版本上仍无法加载，升级前请先确认修复版本。
 
 ### Removed
 
