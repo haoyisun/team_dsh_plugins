@@ -9,11 +9,31 @@ import {
   npmExecPowerShellLaunch,
   RedactedLineStream,
   redactSecrets,
+  requireDshCacheMode,
 } from './runtime-contract.mjs';
 
 const execFileAsync = promisify(execFile);
 const STARTUP_TIMEOUT_MS = 120_000;
 const DIAGNOSTIC_LIMIT = 40_000;
+const STARTUP_FAILURE_LIMIT = 400;
+const STARTUP_FAILURE_LINES = 2;
+const STARTUP_OUTPUT_LIMIT = 4_096;
+const STARTUP_ERROR_LINE = /(?:npm error|error:)/iu;
+
+function startupFailureDetail(output) {
+  const lines = String(output)
+    .split(/\r?\n/u)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  if (lines.length === 0) return '';
+  const failureLines = lines.filter((line) => STARTUP_ERROR_LINE.test(line));
+  const selected = failureLines.length > 0
+    ? failureLines.slice(0, STARTUP_FAILURE_LINES)
+    : lines.slice(-STARTUP_FAILURE_LINES);
+  const joined = selected.join(' ');
+  const detail = joined.slice(0, STARTUP_FAILURE_LIMIT);
+  return detail === joined ? detail : `${detail}…`;
+}
 
 function waitForExit(child) {
   return new Promise((resolve) => {
@@ -113,7 +133,8 @@ export class DshRuntime extends EventEmitter {
     return this.#diagnostics || '尚无 DSH 进程输出。';
   }
 
-  async start(version) {
+  async start(version, { cacheMode = 'prefer-offline' } = {}) {
+    requireDshCacheMode(cacheMode);
     if (this.#closed) throw new Error('DSH runtime 正在退出');
     if (this.running) throw new Error('DSH 已由当前 App 启动');
     const runId = ++this.#nextRunId;
@@ -129,6 +150,7 @@ export class DshRuntime extends EventEmitter {
       throw new Error('DSH runtime 正在退出');
     }
     const launch = npmExecPowerShellLaunch({
+      cacheMode,
       version,
       npmCommand: this.#npmCommand,
       powershellExecutable: this.#powershellExecutable,
@@ -163,6 +185,7 @@ export class DshRuntime extends EventEmitter {
 
     return new Promise((resolve, reject) => {
       let settled = false;
+      let startupOutput = '';
       const timeout = setTimeout(() => {
         if (settled) return;
         settled = true;
@@ -188,7 +211,11 @@ export class DshRuntime extends EventEmitter {
       const consume = (source, chunk) => {
         const text = String(chunk);
         const safeOutput = diagnosticStream.push(text);
-        if (safeOutput) this.#record(source, safeOutput);
+        if (safeOutput) {
+          startupOutput = `${startupOutput}${safeOutput}`
+            .slice(-STARTUP_OUTPUT_LIMIT);
+          this.#record(source, safeOutput);
+        }
         const url = parser.push(text);
         if (url) finish(resolve, { runId, url });
       };
@@ -219,7 +246,12 @@ export class DshRuntime extends EventEmitter {
         const reason = signal ? `signal ${signal}` : `exit code ${code}`;
         this.#record('desktop', `DSH 进程结束：${reason}`);
         if (!settled) {
-          finish(reject, new Error(`DSH 启动前退出（${reason}）`));
+          const detail = startupFailureDetail(startupOutput);
+          finish(reject, new Error(
+            detail
+              ? `DSH 启动前退出（${reason}）：${detail}`
+              : `DSH 启动前退出（${reason}）`,
+          ));
         } else if (!this.#intentionalStops.has(child)) {
           this.emit('unexpected-exit', { code, runId, signal });
         }

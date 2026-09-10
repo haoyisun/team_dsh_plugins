@@ -18,6 +18,8 @@ npx @deepseek-ai/dsh web
 
 新版本成功启动并加载页面后才会成为后续默认版本。升级失败时 Desktop 会尽力恢复原版本；若旧版本不在 npm 缓存且网络不可用，恢复仍可能失败，此时状态页会同时报告升级和恢复错误。此操作不更新 Electron 壳或插件源码。
 
+升级时 Desktop 会强制刷新 npm 元数据；普通启动和回滚仍优先使用本机缓存。如果升级窗口提示 npm 在当前 registry 元数据中找不到该精确版本，说明本机 npm 元数据缓存过期：重试一次即可，仍失败时执行 `npm cache clean --force` 后再试。
+
 npm `latest` 可能仍是预发布版本。DSH Developer Preview 明确允许破坏兼容的变更，因此升级后执行：
 
 ```powershell

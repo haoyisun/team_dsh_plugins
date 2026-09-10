@@ -17,6 +17,8 @@ const execFileAsync = promisify(execFileCallback);
 const RELEASE_SCHEMA_VERSION = 1;
 const MAX_RELEASE_FILE_BYTES = 4_096;
 const NPM_METADATA_TIMEOUT_MS = 15_000;
+const CACHED_METADATA_MODE = 'prefer-offline';
+const FRESH_METADATA_MODE = 'prefer-online';
 const fileDirectory = path.dirname(fileURLToPath(import.meta.url));
 const npmMetadataRunner = path.resolve(
   fileDirectory,
@@ -48,6 +50,32 @@ export function isNewerDshVersion(candidate, current) {
     requireExactDshVersion(candidate),
     requireExactDshVersion(current),
   );
+}
+
+export function dshStartCacheMode({
+  targetVersion,
+  selectedVersion,
+  selectedVersionCommitted,
+}) {
+  const target = requireExactDshVersion(targetVersion);
+  if (selectedVersionCommitted !== true || selectedVersion === undefined) {
+    return FRESH_METADATA_MODE;
+  }
+  return requireExactDshVersion(selectedVersion) === target
+    ? CACHED_METADATA_MODE
+    : FRESH_METADATA_MODE;
+}
+
+export function describeDshInstallFailure(message) {
+  const text = typeof message === 'string' ? message : '';
+  if (!/notarget|ETARGET|No matching version found/iu.test(text)) {
+    return '';
+  }
+  return [
+    'npm 在当前 registry 元数据中找不到该精确版本。',
+    '常见原因是本机 npm 元数据缓存过期：请在“检查 DSH 更新…”中重试，',
+    '若仍失败可执行 npm cache clean --force 后重试。',
+  ].join('');
 }
 
 function parseReleaseDocument(text) {

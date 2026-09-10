@@ -245,8 +245,18 @@ export function dshExecArgs(version) {
   ];
 }
 
+export function requireDshCacheMode(value) {
+  if (value !== 'prefer-offline' && value !== 'prefer-online') {
+    throw new TypeError(
+      'DSH npm 元数据模式必须是 prefer-offline 或 prefer-online',
+    );
+  }
+  return value;
+}
+
 export function npmExecPowerShellLaunch({
   version,
+  cacheMode = 'prefer-offline',
   npmCommand,
   powershellExecutable,
   runnerScript,
@@ -264,6 +274,7 @@ export function npmExecPowerShellLaunch({
       runnerScript,
       npmCommand,
       version,
+      requireDshCacheMode(cacheMode),
     ],
   };
 }

@@ -24,6 +24,8 @@ import {
 import {
   activateDshRelease,
   chooseDshReleaseForStartup,
+  describeDshInstallFailure,
+  dshStartCacheMode,
   DshReleaseStore,
   isNewerDshVersion,
   queryLatestDshVersion,
@@ -508,9 +510,17 @@ async function stopDsh(operation) {
   desktopSession.checkpoint(operation);
 }
 
-async function startDsh(operation, version) {
+function startCacheMode(version) {
+  return dshStartCacheMode({
+    targetVersion: version,
+    selectedVersion,
+    selectedVersionCommitted,
+  });
+}
+
+async function startDsh(operation, version, { cacheMode = 'prefer-offline' } = {}) {
   desktopSession.checkpoint(operation);
-  const starting = runtime.start(version);
+  const starting = runtime.start(version, { cacheMode });
   const runId = runtime.currentRunId;
   desktopSession.setRuntime(operation, runId, 'starting');
   try {
@@ -637,7 +647,9 @@ async function runSelectedDsh(statusMessage, kind = 'starting') {
     await activateDshRelease({
       targetVersion: selectedVersion,
       stop: () => stopDsh(operation),
-      start: (version) => startDsh(operation, version),
+      start: (version) => startDsh(operation, version, {
+        cacheMode: startCacheMode(version),
+      }),
       load: (url) => loadDsh(operation, url),
       commit: async (version) => {
         if (selectedVersionCommitted) return;
@@ -761,7 +773,11 @@ async function checkForDshUpdate() {
       targetVersion: latestVersion,
       previousVersion,
       stop: () => stopDsh(operation),
-      start: (version) => startDsh(operation, version),
+      start: (version) => startDsh(operation, version, {
+        cacheMode: version === previousVersion
+          ? 'prefer-offline'
+          : 'prefer-online',
+      }),
       load: (url) => loadDsh(operation, url),
       commit: async (version) => {
         requireDshPage(operation);
@@ -783,7 +799,10 @@ async function checkForDshUpdate() {
         kind: 'error',
         title: 'DSH 升级失败',
         message: `已自动恢复 DSH ${previousVersion}`,
-        detail: safeMessage(result.error),
+        detail: [
+          safeMessage(result.error),
+          describeDshInstallFailure(result.error?.message),
+        ].filter(Boolean).join('\n'),
         primary: '确定',
       });
       desktopSession.checkpoint(operation);

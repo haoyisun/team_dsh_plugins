@@ -251,8 +251,32 @@ test('npm exec launch keeps the selected npm shim and exact version', () => {
         'D:\\repo\\desktop\\scripts\\run-npx.ps1',
         'C:\\Volta\\bin\\npm.cmd',
         '1.2.3',
+        'prefer-offline',
       ],
     },
+  );
+});
+
+test('npm exec launch can require fresh registry metadata', () => {
+  assert.deepEqual(
+    npmExecPowerShellLaunch({
+      version: '1.2.3',
+      cacheMode: 'prefer-online',
+      npmCommand: 'C:\\Volta\\bin\\npm.cmd',
+      powershellExecutable: 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe',
+      runnerScript: 'D:\\repo\\desktop\\scripts\\run-npx.ps1',
+    }).args.slice(-2),
+    ['1.2.3', 'prefer-online'],
+  );
+  assert.throws(
+    () => npmExecPowerShellLaunch({
+      version: '1.2.3',
+      cacheMode: 'prefer-sometimes',
+      npmCommand: 'C:\\Volta\\bin\\npm.cmd',
+      powershellExecutable: 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe',
+      runnerScript: 'D:\\repo\\desktop\\scripts\\run-npx.ps1',
+    }),
+    /元数据模式/u,
   );
 });
 

@@ -2,7 +2,7 @@
 
 ## 状态
 
-Accepted
+Accepted（首次安装与升级的 npm 元数据新鲜度由 ADR-0018 修订）
 
 ## 日期
 

@@ -13,6 +13,8 @@ import test from 'node:test';
 import {
   activateDshRelease,
   chooseDshReleaseForStartup,
+  describeDshInstallFailure,
+  dshStartCacheMode,
   DshReleaseStore,
   isExactDshVersion,
   isNewerDshVersion,
@@ -27,6 +29,46 @@ test('release versions accept exact semver only', () => {
   assert.equal(isExactDshVersion('../dsh'), false);
   assert.equal(isNewerDshVersion('1.3.0', '1.2.9'), true);
   assert.equal(isNewerDshVersion('1.2.3', '1.2.3'), false);
+});
+
+test('only the committed version may start from cached npm metadata', () => {
+  assert.equal(dshStartCacheMode({
+    targetVersion: '1.2.3',
+    selectedVersion: undefined,
+    selectedVersionCommitted: false,
+  }), 'prefer-online');
+  assert.equal(dshStartCacheMode({
+    targetVersion: '1.3.0',
+    selectedVersion: '1.2.3',
+    selectedVersionCommitted: true,
+  }), 'prefer-online');
+  assert.equal(dshStartCacheMode({
+    targetVersion: '1.2.3',
+    selectedVersion: '1.2.3',
+    selectedVersionCommitted: true,
+  }), 'prefer-offline');
+  assert.equal(dshStartCacheMode({
+    targetVersion: '1.2.3',
+    selectedVersion: '1.2.3',
+    selectedVersionCommitted: false,
+  }), 'prefer-online');
+  assert.throws(() => dshStartCacheMode({
+    targetVersion: 'latest',
+    selectedVersion: '1.2.3',
+    selectedVersionCommitted: true,
+  }), /精确 semver/u);
+});
+
+test('stale npm metadata failures explain how to recover', () => {
+  const hint = describeDshInstallFailure([
+    'DSH 启动前退出（exit code 1）',
+    'npm error notarget No matching version found for',
+    ' @deepseek-ai/dsh@0.1.5-rc.1.',
+  ].join('\n'));
+
+  assert.match(hint, /npm cache clean --force/u);
+  assert.equal(describeDshInstallFailure('DSH 进程已退出'), '');
+  assert.equal(describeDshInstallFailure(undefined), '');
 });
 
 test('release store writes and reads one exact selected version atomically', async () => {
