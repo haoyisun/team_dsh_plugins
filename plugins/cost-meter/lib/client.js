@@ -17,6 +17,7 @@ window.__ModuleLoader__.load({
 			".cm-wrap{position:relative;display:inline-flex}",
 			".cm-trigger{border:1px solid var(--dsw-alias-border-l2);height:32px;color:var(--dsw-alias-label-primary);font-family:var(--dsw-font-family);cursor:pointer;background:0 0;border-radius:18px;justify-content:center;align-items:center;gap:5px;padding:6px 12px;font-size:13px;font-weight:400;line-height:20px;display:inline-flex;min-width:0}",
 			".cm-trigger:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover)}",
+			".cm-triggerWarn{border-color:var(--dsw-alias-state-warn-primary);color:var(--dsw-alias-state-warn-primary)}",
 			".cm-trigger span{flex:none;white-space:nowrap}",
 			".cm-triggerVal{font-variant-numeric:tabular-nums}",
 			// 面板：菜单风格浮层。
@@ -123,34 +124,53 @@ window.__ModuleLoader__.load({
 			return String(Math.round(n));
 		}
 
-		/** 本地 YYYY-MM-DD。 */
-		function dayKey(date) {
-			const y = date.getFullYear();
-			const m = String(date.getMonth() + 1).padStart(2, "0");
-			const d = String(date.getDate()).padStart(2, "0");
-			return y + "-" + m + "-" + d;
+		/** 价格行的稳定 id：给 React 做 key，避免增删行时 DOM/光标复用错位。 */
+		let priceRowSeq = 0;
+		function nextRowId() {
+			priceRowSeq += 1;
+			return "row-" + priceRowSeq;
 		}
 
-		/** 近 N 天日期键（含今天）。 */
-		function recentDayKeys(days) {
-			const out = [];
-			const now = new Date();
-			for (let i = days - 1; i >= 0; i--) {
-				out.push(dayKey(new Date(now.getFullYear(), now.getMonth(), now.getDate() - i)));
-			}
-			return out;
+		/**
+		 * 价格输入值 → 数字。
+		 * 空串按 0；非法输入返回 NaN，序列化后是 null，由服务端 schema 明确拒绝，
+		 * 而不是在客户端被静默吞成一个看似合理的数字。
+		 */
+		function toPriceNumber(value) {
+			if (typeof value === "number") return value;
+			const text = String(value ?? "").trim();
+			if (text === "") return 0;
+			return Number(text);
 		}
 
-		/** 简短日期 MM-DD。 */
+		/**
+		 * 简短日期 MM-DD。
+		 * 近 14 天的日期键由服务端按配置的日界算出（`stats.dayKeys`），
+		 * 客户端不再自行做时区运算——否则浏览器时区与宿主不同时柱状图会整体错位。
+		 */
 		function shortDate(key) {
 			return key.slice(5);
 		}
 
+		/**
+		 * 取 JSON。失败时抛出携带状态码与服务端错误文案的 Error：
+		 * 面板需要区分 409（并发改价）与 400（校验失败），并直接展示服务端的原因，
+		 * 而不是只看到「HTTP 400」。
+		 */
 		function fetchJson(url, options) {
-			return fetch(url, options).then((res) => {
-				if (!res.ok) throw new Error("HTTP " + res.status);
-				return res.json();
-			});
+			return fetch(url, options).then((res) =>
+				res
+					.json()
+					.catch(() => null)
+					.then((body) => {
+						if (!res.ok) {
+							const error = new Error((body && body.error) || "HTTP " + res.status);
+							error.status = res.status;
+							throw error;
+						}
+						return body;
+					})
+			);
 		}
 		//#endregion
 
@@ -166,7 +186,9 @@ window.__ModuleLoader__.load({
 			if (!balance.available) {
 				const hint = balance.error === "NO_API_KEY"
 					? "未找到 DeepSeek API key（DEEPSEEK_API_KEY）"
-					: "余额查询失败：" + String(balance.error ?? "unknown");
+					: balance.error === "NON_LOCAL_BIND"
+						? "DSH Web 绑定在所有网卡，出于安全考虑不下发账户余额"
+						: "余额查询失败：" + String(balance.error ?? "unknown");
 				return react.createElement("div", { className: "cm-card" },
 					react.createElement("div", { className: "cm-cardLabel" }, "账户余额"),
 					react.createElement("div", { className: "cm-balanceErr" }, hint),
@@ -229,13 +251,16 @@ window.__ModuleLoader__.load({
 			);
 		}
 
-		/** 近 14 天每日消耗柱状图。 */
+		/** 近 14 天每日消耗柱状图（日期键来自服务端，见 shortDate 注释）。 */
 		function DailyChart(props) {
-			const { daily, currency } = props;
+			const { daily, currency, dayKeys } = props;
 			const byDate = new Map();
 			for (const row of daily) byDate.set(row.date, row);
-			const keys = recentDayKeys(14);
-			const maxCost = Math.max(1, ...keys.map((k) => byDate.get(k)?.cost ?? 0));
+			const keys = Array.isArray(dayKeys) && dayKeys.length > 0 ? dayKeys : [];
+			// 按数据最大值定标：早先用 Math.max(1, …) 会让所有日消耗都低于 1 元时
+			// 每根柱子都被压到同一最小高度，小额用户看不出趋势。
+			const peakCost = Math.max(0, ...keys.map((k) => byDate.get(k)?.cost ?? 0));
+			const maxCost = peakCost > 0 ? peakCost : 1;
 			const bars = keys.map((key, index) => {
 				const row = byDate.get(key);
 				const cost = row?.cost ?? 0;
@@ -326,7 +351,7 @@ window.__ModuleLoader__.load({
 
 		/** 模型单价编辑器（空闲/高峰双档 + 同步官方价格）。 */
 		function PriceEditor(props) {
-			const { draft, currency, saving, syncing, syncError, expanded, syncMeta, onChange, onAddRow, onRemoveRow, onSave, onSync, onToggle } = props;
+			const { draft, currency, saving, syncing, syncError, saveError, expanded, syncMeta, onChange, onAddRow, onRemoveRow, onSave, onSync, onToggle } = props;
 			const syncLabel = (() => {
 				if (syncMeta === null || syncMeta === undefined || syncMeta.lastSyncAt === undefined) {
 					return react.createElement("div", { className: "cm-syncLine" }, "尚未同步过官方价格");
@@ -377,16 +402,20 @@ window.__ModuleLoader__.load({
 							react.Fragment,
 							null,
 							react.createElement("div", { className: "cm-hint" },
-								"高峰时段为北京时间 9:00-12:00、14:00-18:00，其余为空闲时段；费用按每次调用的北京时间自动选档。缓存写官方无单独收费（默认 0）。"),
+								"高峰时段为北京时间周一至周五 9:00-12:00、14:00-18:00，其余为空闲时段；费用按每次调用的北京时间自动选档。缓存写官方无单独收费（默认 0）。"),
 							syncError
 								? react.createElement("div", { className: "cm-syncLine" },
 									react.createElement("span", { className: "cm-syncWarn" }, "同步失败：" + syncError))
+								: null,
+							saveError
+								? react.createElement("div", { className: "cm-syncLine" },
+									react.createElement("span", { className: "cm-syncWarn" }, "保存失败：" + saveError))
 								: null,
 							syncLabel,
 							draft.map((row, index) =>
 								react.createElement(
 									"div",
-									{ key: index, className: "cm-priceCard" },
+									{ key: row.id ?? index, className: "cm-priceCard" },
 									react.createElement(
 										"div",
 										{ className: "cm-priceModelRow" },
@@ -454,6 +483,7 @@ window.__ModuleLoader__.load({
 			const [saving, setSaving] = react.useState(false);
 			const [syncing, setSyncing] = react.useState(false);
 			const [syncError, setSyncError] = react.useState(null);
+			const [saveError, setSaveError] = react.useState(null);
 			const [refreshing, setRefreshing] = react.useState(false);
 			const [pricesOpen, setPricesOpen] = react.useState(false);
 			const rootRef = react.useRef(null);
@@ -473,12 +503,18 @@ window.__ModuleLoader__.load({
 				return () => clearInterval(timer);
 			}, [load]);
 
-			// 统计加载后初始化价格草稿（仅当用户尚未开始编辑）。
+			/** 用服务端价格重置编辑器草稿（带上稳定行 id，避免 React 复用错行）。 */
+			const resetDraft = react.useCallback((rows) => {
+				setDraft((rows ?? []).map((row) => ({ ...row, id: nextRowId() })));
+			}, []);
+
+			// 统计首次加载后初始化价格草稿。只在草稿还没建立时初始化：
+			// 30 秒轮询会带来新价格，直接覆盖会吞掉用户正在输入的内容。
 			react.useEffect(() => {
 				if (stats !== null && stats.prices !== undefined && draft === null) {
-					setDraft(stats.prices.map((p) => ({ ...p })));
+					resetDraft(stats.prices);
 				}
-			}, [stats, draft]);
+			}, [stats, draft, resetDraft]);
 
 			// 打开时同步一次；Esc 关闭；外部点击关闭。
 			react.useEffect(() => {
@@ -494,15 +530,22 @@ window.__ModuleLoader__.load({
 
 			const refreshBalance = () => {
 				setRefreshing(true);
+				setSaveError(null);
 				fetchJson("/api/cost-meter/refresh-balance", { method: "POST" })
 					.then(() => load())
+					.catch((err) => setSaveError("余额刷新失败：" + String(err && err.message ? err.message : err)))
 					.finally(() => setRefreshing(false));
 			};
 
+			/**
+			 * 编辑价格字段。
+			 * 数值字段保存**原始字符串**：受控的 number 输入会把 "0." 立刻解析成 0 并写回
+			 * "0"，导致 0.02 这类小数根本无法输入。真正解析推迟到保存时。
+			 */
 			const onPricesChange = (index, field, raw) => {
 				setDraft((current) => {
 					const next = current.map((row, i) => (i === index ? { ...row } : row));
-					next[index][field] = field === "model" ? raw : Math.max(0, parseFloat(raw) || 0);
+					next[index][field] = raw;
 					return next;
 				});
 			};
@@ -510,8 +553,8 @@ window.__ModuleLoader__.load({
 			const onAddRow = () => {
 				setDraft((current) => [
 					...(current ?? []),
-					{ model: "", inputPerM: 1.5, cacheReadPerM: 0.05, cacheWritePerM: 0, outputPerM: 4.5,
-						peakInputPerM: 1.5, peakCacheReadPerM: 0.05, peakCacheWritePerM: 0, peakOutputPerM: 4.5 },
+					{ id: nextRowId(), model: "", inputPerM: 0, cacheReadPerM: 0, cacheWritePerM: 0, outputPerM: 0,
+						peakInputPerM: 0, peakCacheReadPerM: 0, peakCacheWritePerM: 0, peakOutputPerM: 0 },
 				]);
 			};
 
@@ -519,23 +562,68 @@ window.__ModuleLoader__.load({
 				setDraft((current) => current.filter((_, i) => i !== index));
 			};
 
+			/** 高峰档价格：未填写时回退到空闲档，与编辑器显示的回退语义一致。 */
+			const peakPrice = (peak, base) =>
+				toPriceNumber(peak === "" || peak === undefined || peak === null ? base : peak);
+
+			/** 把草稿里的字符串价格转成数字行（非法值序列化成 null，由服务端报错）。 */
+			const toPriceRows = (rows) =>
+				rows.map((row) => ({
+					model: row.model,
+					inputPerM: toPriceNumber(row.inputPerM),
+					cacheReadPerM: toPriceNumber(row.cacheReadPerM),
+					cacheWritePerM: toPriceNumber(row.cacheWritePerM),
+					outputPerM: toPriceNumber(row.outputPerM),
+					peakInputPerM: peakPrice(row.peakInputPerM, row.inputPerM),
+					peakCacheReadPerM: peakPrice(row.peakCacheReadPerM, row.cacheReadPerM),
+					peakCacheWritePerM: peakPrice(row.peakCacheWritePerM, row.cacheWritePerM),
+					peakOutputPerM: peakPrice(row.peakOutputPerM, row.outputPerM),
+				}));
+
 			const savePrices = () => {
 				if (draft === null) return;
 				setSaving(true);
+				setSaveError(null);
 				fetchJson("/api/cost-meter/prices", {
 					method: "POST",
 					headers: { "content-type": "application/json" },
-					body: JSON.stringify({ prices: draft }),
+					body: JSON.stringify({ prices: toPriceRows(draft) }),
 				})
 					.then(() => load())
+					.catch((err) => {
+						const conflict = err !== null && err !== undefined && err.status === 409;
+						setSaveError(
+							conflict
+								? "价格已在别处修改，已重新载入最新价格"
+								: String(err && err.message ? err.message : err),
+						);
+						if (conflict) {
+							// 冲突时草稿必须回到服务端的真实价格，否则用户看到的仍是旧值。
+							fetchJson("/api/cost-meter/stats")
+								.then((data) => {
+									if (Array.isArray(data.prices)) resetDraft(data.prices);
+									setStats(data);
+									setError(null);
+								})
+								.catch(() => {});
+						} else {
+							load();
+						}
+					})
 					.finally(() => setSaving(false));
 			};
 
 			const syncPrices = () => {
 				setSyncing(true);
 				setSyncError(null);
+				setSaveError(null);
 				fetchJson("/api/cost-meter/sync-prices", { method: "POST" })
-					.then(() => load())
+					.then((result) => {
+						// 同步会覆盖价格表，编辑器草稿必须跟着换成新价，否则界面上仍是旧价，
+						// 用户再点一次「保存单价」就把刚同步的价格覆盖回去了。
+						if (result !== null && Array.isArray(result.prices)) resetDraft(result.prices);
+						load();
+					})
 					.catch((err) => setSyncError(String(err && err.message ? err.message : err)))
 					.finally(() => setSyncing(false));
 			};
@@ -543,6 +631,12 @@ window.__ModuleLoader__.load({
 			const currency = stats !== null && stats.currency ? stats.currency : "CNY";
 			const todayCost = stats !== null ? (stats.periods.today.cost ?? 0) : null;
 			const triggerLabel = todayCost === null ? "…" : moneySymbol(currency) + formatMoney(todayCost);
+			// 今日样本里存在没有单价行的模型时给出可见提示：这类情况下费用恒为 0，
+			// 仅看胶囊数字无法区分“真的没花钱”和“价格表没匹配上”。
+			const unpriced = stats !== null && stats.periods.today.unpriced === true;
+			// 已有数据时刷新失败过去是完全静默的：胶囊会一直显示旧值，看起来一切正常。
+			const stale = error !== null && stats !== null;
+			const triggerHint = "今日 DS 消耗 " + triggerLabel + (unpriced ? "（有模型缺单价，按 0 计）" : "") + "，点击查看费用统计";
 
 			const panel = open
 				? react.createElement(
@@ -570,9 +664,13 @@ window.__ModuleLoader__.load({
 									: react.createElement(
 											react.Fragment,
 											null,
+											stale
+												? react.createElement("div", { className: "cm-balanceErr" },
+													"刷新失败，以下为上次成功读取的数据：" + error)
+												: null,
 											react.createElement(BalanceCard, { balance: stats.balance, currency, refreshing, onRefresh: refreshBalance }),
 											react.createElement(PeriodGrid, { currency, periods: stats.periods }),
-											react.createElement(DailyChart, { daily: stats.daily, currency }),
+											react.createElement(DailyChart, { daily: stats.daily, currency, dayKeys: stats.dayKeys }),
 											react.createElement(ModelRows, { byModel: stats.byModel, currency }),
 											react.createElement(PriceEditor, {
 												draft: draft ?? [],
@@ -580,6 +678,7 @@ window.__ModuleLoader__.load({
 												saving,
 												syncing,
 												syncError,
+												saveError,
 												expanded: pricesOpen,
 												syncMeta: stats.pricesMeta ?? null,
 												onChange: onPricesChange,
@@ -611,10 +710,10 @@ window.__ModuleLoader__.load({
 					"button",
 					{
 						type: "button",
-						className: "cm-trigger",
+						className: "cm-trigger" + (unpriced || stale ? " cm-triggerWarn" : ""),
 						"aria-expanded": open,
-						"aria-label": "今日 DS 消耗 " + triggerLabel + "，点击查看费用统计",
-						title: "今日 DS 消耗 " + triggerLabel + "，点击查看费用统计",
+						"aria-label": triggerHint,
+						title: triggerHint,
 						onClick: () => setOpen((v) => !v),
 					},
 					react.createElement("span", null, "今日"),
