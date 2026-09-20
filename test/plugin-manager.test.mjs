@@ -1158,7 +1158,7 @@ test('plugin package exposes an authenticated localized DSH settings section', a
   assert.equal(manifest.name, '@team-dsh-plugins/plugin-manager');
   assert.equal(manifest.exports['./client'], './lib/client.js');
   assert.equal(manifest.dsh.client.platform, 'web');
-  assert.match(host, /ctx\.connection\.rpc\.handle\(\s*['"]\/plugin-manager['"]/);
+  assert.match(host, /registerRpcChannel\(\s*ctx,\s*['"]\/plugin-manager['"]/s);
   assert.match(host, /ctx\.settings\.register\(\s*name/);
   assert.match(host, /registryUrl/);
   assert.match(client, /id:\s*["']@team-dsh-plugins\/plugin-manager["']/);

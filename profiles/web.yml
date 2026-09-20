@@ -5,7 +5,5 @@
   disabled: true
 - id: mcp-manager
   name: '@team-dsh-plugins/mcp-manager'
-  disabled: true
 - id: plugin-manager
   name: '@team-dsh-plugins/plugin-manager'
-  disabled: true

@@ -10,6 +10,17 @@ const pluginsRoot = path.resolve(
   'plugins',
 );
 
+/**
+ * 插件通过 `registerRpcChannel(ctx, ...)` 或直接 `ctx.connection.rpc.handle(...)`
+ * 注册 RPC 通道；两者都要求宿主声明 `connection` 与 `webServer`。
+ * @param source - 插件 Host 入口源码。
+ * @returns 该插件是否注册了 HTTP RPC 通道。
+ */
+function hostsRpcChannel(source) {
+  return /registerRpcChannel\(\s*ctx/u.test(source)
+    || source.includes('ctx.connection.rpc.handle(');
+}
+
 async function hostPluginEntries() {
   const entries = await readdir(pluginsRoot, { withFileTypes: true });
   return entries
@@ -21,7 +32,7 @@ test('host plugins that serve RPC channels declare webServer', async () => {
   const hostingRpcChannels = [];
   for (const entry of await hostPluginEntries()) {
     const source = await readFile(entry, 'utf8').catch(() => undefined);
-    if (!source?.includes('ctx.connection.rpc.handle(')) continue;
+    if (!source || !hostsRpcChannel(source)) continue;
 
     const plugin = await import(pathToFileURL(entry).href);
     const name = path.basename(path.dirname(path.dirname(entry)));
@@ -29,8 +40,12 @@ test('host plugins that serve RPC channels declare webServer', async () => {
 
     assert.ok(
       Array.isArray(plugin.inject) && plugin.inject.includes('webServer'),
-      `${name} 通过 connection.rpc.handle 注册 HTTP RPC 通道，`
+      `${name} 通过 RPC 通道注册路由，`
       + '必须按 DSH 客户端连接契约在 inject 中声明 webServer',
+    );
+    assert.ok(
+      plugin.inject.includes('connection'),
+      `${name} 依赖 ctx.connection 服务，必须在 inject 中声明 connection`,
     );
   }
 
@@ -38,6 +53,16 @@ test('host plugins that serve RPC channels declare webServer', async () => {
     hostingRpcChannels.sort(),
     ['mcp-manager', 'plugin-manager'],
   );
+});
+
+test('the shared RPC channel helper prefers the official registration path', async () => {
+  const helper = await readFile(
+    path.join(pluginsRoot, 'mcp-manager', 'lib', 'rpc-channel.js'),
+    'utf8',
+  );
+  assert.match(helper, /ctx\.connection\.rpc\.handle\(/u);
+  assert.match(helper, /ctx\.webServer\.register\(/u);
+  assert.match(helper, /requestRejection/u);
 });
 
 test('workspace host plugins are importable with declared dependencies', async () => {

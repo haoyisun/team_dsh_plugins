@@ -29,15 +29,30 @@ pnpm test
 npx @deepseek-ai/dsh web
 ```
 
-## 已知问题：DSH 0.1.5-rc.1 无法加载带 RPC 通道的宿主插件
+## 已知问题：DSH 0.1.5-rc.1 起无法加载带 RPC 通道的宿主插件
 
-2026-09-10 在隔离的临时 DSH Home 中实测：`@deepseek-ai/dsh-client-connection@0.1.5-rc.1` 自身的 `inject` 从 `webServer`、`credentials` 变为只保留 `credentials`，但 `HostConnectionService` 注册通道时仍然读取 `owner.webServer`。因此任何调用 `ctx.connection.rpc.handle(...)` 的宿主插件都会在加载期失败：
+2026-09-10 实测：`@deepseek-ai/dsh-client-connection` 从 `0.1.5-rc.1` 起把
+`webServer` 从自身 `inject` 中移除，却仍在 `HostConnectionService.register()`
+里读取 `owner.webServer`。因此任何调用 `ctx.connection.rpc.handle(...)` 的宿主
+插件都会在加载期失败：
 
 ```
 Error: failed to apply loader entry <plugin>: cannot get property "webServer" without inject
 ```
 
-已验证这与调用方无关：在插件模块 `inject`、Profile 条目 `inject` 以及 `ctx.inject(['webServer'], ...)` 子上下文三种写法下都失败，同一份代码在 0.1.2-rc.1 上正常。`@team-dsh-plugins/mcp-manager` 与 `@team-dsh-plugins/plugin-manager` 依赖该 API，因此在官方修复前请继续固定 0.1.2-rc.1，不要升级到 0.1.5-rc.1；升级只会失败并自动回滚。官方修复后应删除本节。
+2026-09-18 复核：`0.1.5-rc.2`（当前 `latest`）与 `0.1.6-alpha.2` 仍然存在该
+缺陷；`0.1.2-rc.1` 正常。调用方无法通过自身 `inject`、Profile 条目 `inject` 或
+`ctx.inject(['webServer'], ...)` 子上下文规避。
+
+`@team-dsh-plugins/mcp-manager` 与 `@team-dsh-plugins/plugin-manager` 不再依赖
+官方修复：两者通过 `plugins/mcp-manager/lib/rpc-channel.js` 注册 RPC 通道，先尝试
+官方 `connection.rpc.handle`，只有命中该缺陷时才回退到插件自己用
+`ctx.webServer.register()` 注册同一通道，并复用
+`ctx.connection.requestRejection()` 保留 Host/Origin 与浏览器会话鉴权。因此这些
+插件在 0.1.2-rc.1、0.1.5-rc.1、0.1.5-rc.2 与 0.1.6-alpha.2 上都能加载。
+
+官方修复该缺陷后，回退分支不会再被触发；届时可以删除
+`rpc-channel.js` 中的回退实现，恢复直接调用官方 API。
 
 ## 出现插件加载故障
 

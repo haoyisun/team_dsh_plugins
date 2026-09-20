@@ -13,6 +13,7 @@ import Schema from '@deepseek-ai/schemastery';
 
 import { McpManagerController } from './controller.js';
 import { ManagedMcpRuntime, validateInstance } from './model.js';
+import { registerRpcChannel } from './rpc-channel.js';
 
 const name = 'mcp-manager';
 const inject = ['settings', 'credentials', 'connection', 'tools', 'webServer'];
@@ -161,16 +162,24 @@ async function apply(ctx) {
   const profileRequire = createRequire(
     path.join(dshHome, 'profiles', 'web', 'package.json'),
   );
-  const mcpClient = await import(pathToFileURL(
-    profileRequire.resolve('@deepseek-ai/dsh-mcp-client'),
-  ).href);
+  // 官方 MCP Client 只在实例真正启动时才需要：懒加载可以避免 profile 里缺少
+  // 该包时连带卸载管理界面本身。
+  let mcpClient;
+  const loadMcpClient = async () => {
+    if (mcpClient === undefined) {
+      mcpClient = await import(pathToFileURL(
+        profileRequire.resolve('@deepseek-ai/dsh-mcp-client'),
+      ).href);
+    }
+    return mcpClient;
+  };
   const settingsScope = ctx.settings.register(name, SettingsConfig, {
     base: { instances: [], approvals: {} },
     validate: validateSettings,
   });
   const runtime = new ManagedMcpRuntime({
     startClient: async (config) => {
-      const fiber = ctx.plugin(mcpClient, config);
+      const fiber = ctx.plugin(await loadMcpClient(), config);
       await fiber;
       return fiber;
     },
@@ -205,7 +214,8 @@ async function apply(ctx) {
 
   await controller.sync(settingsScope.get());
   const unwatch = settingsScope.watch((next) => controller.sync(next));
-  const removeRpc = ctx.connection.rpc.handle(
+  const removeRpc = await registerRpcChannel(
+    ctx,
     '/mcp-manager',
     (endpoint, payload) => controller.handle(endpoint, payload),
   );

@@ -36,7 +36,8 @@
 - DSH Desktop 为进程和快捷方式设置同一 AppUserModelID，并用内容哈希图标路径绕过 Explorer 旧缓存，固定或右键任务栏图标时继续使用自定义图标。
 - DSH Desktop 任务栏图标改为标准多尺寸 ICO，避免 Windows 把透明背景画成黑底，从而和 `app-icon.png` 对不上。
 - DSH Desktop 首次安装和升级现在强制刷新 npm 元数据，修复“检查能发现新版本、安装却报 `ETARGET` 并回滚”的问题；普通启动与回滚仍优先使用本机缓存，启动失败时错误信息会带上 npm 的真实输出。
-- `@team-dsh-plugins/mcp-manager` 与 `@team-dsh-plugins/plugin-manager` 按客户端连接契约声明 RPC 通道所需的 `webServer` 宿主服务依赖；受 DSH 0.1.5-rc.1 自身的连接包回归影响，这两个插件在该版本上仍无法加载，升级前请先确认修复版本。
+- `@team-dsh-plugins/mcp-manager` 与 `@team-dsh-plugins/plugin-manager` 恢复可用：两者此前在 DSH 0.1.5-rc.1 及之后的版本上会因官方连接包回归而在加载期失败并拖垮 DSH 启动，只能保持禁用。现在它们的 RPC 通道注册改为官方优先、只在命中该缺陷时回退到插件自己通过 `ctx.webServer` 注册同协议通道，并继续复用官方 Host/Origin 与浏览器会话鉴权；在 0.1.2-rc.1、0.1.5-rc.2 与 0.1.6-alpha.2 上均可加载。
+- `@team-dsh-plugins/mcp-manager` 与 `@team-dsh-plugins/plugin-manager` 按客户端连接契约声明 RPC 通道所需的 `webServer` 宿主服务依赖。
 - `@team-dsh-plugins/cost-meter` 修复官方定价页改版后消费金额恒为 0 的问题：模型名单元格新增的 `<sup>(n)</sup>` 脚注标记被解析成模型 id 的一部分（`deepseek-flash (1)`），价格表与真实模型永远匹配不上；现在解析价格表时会剥掉脚注标记，读取价格时也会归一化模型名，已经被写坏的 settings 价格行无需重新同步即可恢复计费。
 - `@team-dsh-plugins/cost-meter` 内置官方价格表更新为当前官网价格（`deepseek-flash`、`deepseek-v4-pro`），并按官方公告把已下线的旧模型名 `deepseek-v4-flash`、`deepseek-v4-flash-vision-exp` 映射到 Flash 价格，历史会话不再显示为未定价。
 - `@team-dsh-plugins/cost-meter` 按官方规则把高峰时段限制为北京时间周一至周五 9:00-12:00、14:00-18:00，周末全天按空闲价计费，不再多算一倍。

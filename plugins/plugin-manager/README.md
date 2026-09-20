@@ -14,7 +14,7 @@
 
 系统 Bundle、工作区插件和管理器自身只读。所有 Bundle 增删和版本变化都需要重启 DSH Web 才会生效。
 
-宿主插件依赖的宿主服务：`settings`、`connection`、`webServer`（`/plugin-manager` RPC 通道注册在 `webServer` 上）。
+宿主插件依赖的宿主服务：`settings`、`connection`、`webServer`（`/plugin-manager` RPC 通道注册在 `webServer` 上，复用 `mcp-manager/lib/rpc-channel.js` 的官方优先、缺陷回退注册逻辑）。
 
 ## 使用
 

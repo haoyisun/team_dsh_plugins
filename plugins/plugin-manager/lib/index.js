@@ -8,6 +8,8 @@ import { PluginManagerController } from './controller.js';
 import { isExactSemver, isPackageName, validateRegistryUrl } from './model.js';
 import { runProcess } from './process.js';
 import { ProfilePluginService } from './service.js';
+// 两个 manager 共用同一份 RPC 通道兼容层，避免各自维护一套线上协议。
+import { registerRpcChannel } from '../../mcp-manager/lib/rpc-channel.js';
 
 const name = 'plugin-manager';
 const inject = ['settings', 'connection', 'webServer'];
@@ -86,7 +88,8 @@ async function apply(ctx) {
     rollback,
     registryPrefs,
   });
-  const removeRpc = ctx.connection.rpc.handle(
+  const removeRpc = await registerRpcChannel(
+    ctx,
     '/plugin-manager',
     (endpoint, payload) => controller.handle(endpoint, payload),
   );

@@ -12,6 +12,8 @@
 
 宿主插件依赖的宿主服务：`settings`、`credentials`、`connection`、`tools`、`webServer`（`/mcp-manager` RPC 通道注册在 `webServer` 上）。
 
+RPC 通道经 `lib/rpc-channel.js` 注册：优先使用官方 `ctx.connection.rpc.handle`；当官方连接包命中 `cannot get property "webServer" without inject` 缺陷（0.1.5-rc.1 起，含 0.1.5-rc.2 与 0.1.6-alpha.2）时，回退到插件自己通过 `ctx.webServer` 注册同协议通道，并保留 `ctx.connection.requestRejection` 的 Host/Origin 与浏览器会话鉴权。
+
 ## 使用
 
 运行仓库接入和检查：
